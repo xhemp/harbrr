@@ -3,7 +3,7 @@ package selector
 import (
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // TestRowsHTML checks row splitting and the "after" merge against Jackett.
@@ -137,7 +137,7 @@ func TestEdgeCasesHTML(t *testing.T) {
 // TestSelfMatchHTML pins Jackett's "Dom.Matches(sel) ? Dom : QuerySelector(sel)"
 // behavior: a field selector that matches the ROW element itself resolves to the
 // row, not to a descendant (or not-found). cascadia's FindMatcher is
-// descendant-only, so this requires the explicit self-match seekbrr now adds.
+// descendant-only, so this requires the explicit self-match harbrr now adds.
 func TestSelfMatchHTML(t *testing.T) {
 	t.Parallel()
 	row := firstHTMLRow(t, "edge.html", "div#row")

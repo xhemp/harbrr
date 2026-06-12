@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/selector"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // knownMethods is the set of login methods this executor implements. A corpus

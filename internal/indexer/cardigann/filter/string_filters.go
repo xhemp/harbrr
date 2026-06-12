@@ -179,7 +179,7 @@ func filterValidFilename(value string, _ []string) (string, error) {
 // isInvalidFilenameRune reports whether r is in .NET's Windows
 // Path.GetInvalidFileNameChars() set: control chars 0–31 plus the reserved
 // punctuation. This intentionally mirrors the WINDOWS set (not the Linux set,
-// which is only {'\0','/'}) so behavior is deterministic across seekbrr hosts.
+// which is only {'\0','/'}) so behavior is deterministic across harbrr hosts.
 func isInvalidFilenameRune(r rune) bool {
 	if r < 0x20 {
 		return true

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // ErrDateUnwired is returned by the default date dependencies. The dateparse

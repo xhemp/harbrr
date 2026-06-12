@@ -1,4 +1,4 @@
-# seekbrr
+# harbrr
 
 A lightweight, Go-native, **Cardigann-compatible Torznab/Newznab search provider** for the autobrr
 ecosystem — the family's native indexer search/scrape provider (the slot currently filled by
@@ -13,7 +13,7 @@ Prowlarr), built on Cardigann compatibility instead of a new tracker format.
 ```sh
 make tools         # install gofumpt, goimports, golangci-lint
 make vendor-defs   # fetch the Jackett definition snapshot into internal/indexer/definitions/vendor
-make build         # -> bin/seekbrr
+make build         # -> bin/harbrr
 make test          # go test -race -count=1 ./...
 make precommit     # fmt + lint + test (run before final on any change)
 pre-commit install # enable gitleaks + lint + secret guard on commit
@@ -24,7 +24,7 @@ stages land.
 
 ## Layout
 
-- `cmd/seekbrr` — entrypoint
+- `cmd/harbrr` — entrypoint
 - `internal/indexer/cardigann` — the engine, a compiler-style pipeline (one package per stage:
   `loader → … → normalizer`); parity gate in `parity/`
 - `internal/indexer/definitions` — embedded Jackett snapshot (`vendor/`, **read-only**) + `dropin/`
@@ -35,8 +35,8 @@ stages land.
 
 ## Module path
 
-The Go module is `github.com/autobrr/seekbrr` (the intended home) even while the repo lives at
-`nitrobass24/seekbrr` during early development — this avoids an import-path rename on the eventual
+The Go module is `github.com/autobrr/harbrr` (the intended home) even while the repo lives at
+`nitrobass24/harbrr` during early development — this avoids an import-path rename on the eventual
 move to the autobrr org. Local builds work regardless of where the repo is hosted.
 
 ## License

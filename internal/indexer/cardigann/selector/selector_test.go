@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // scalar is a test helper building a present loader.Scalar.
@@ -148,7 +148,7 @@ func TestFieldHTML(t *testing.T) {
 // TestFieldDefersRequiredDecision pins the scope boundary with item 10: this
 // stage does NOT itself apply Selector.Optional / Default or throw on a required
 // empty match. Jackett's handleSelector takes a `required` flag and throws when a
-// required selector matches nothing, but seekbrr splits that decision out — Field
+// required selector matches nothing, but harbrr splits that decision out — Field
 // reports found=false on every empty extraction (no error), and the engine field
 // loop (item 10) inspects Optional/Default and wraps ErrSelectorNoMatch when the
 // value is required. This test guarantees item 10 cannot silently inherit a

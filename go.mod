@@ -1,4 +1,4 @@
-module github.com/autobrr/seekbrr
+module github.com/autobrr/harbrr
 
 go 1.26
 

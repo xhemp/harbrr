@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 const baseURL = "https://tracker.example"

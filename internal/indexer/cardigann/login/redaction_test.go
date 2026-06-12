@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // secretSentinels are credential/cookie/token values fed into the executor. NONE

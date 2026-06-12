@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // testDeps builds a minimal Deps for request-building tests. Request building

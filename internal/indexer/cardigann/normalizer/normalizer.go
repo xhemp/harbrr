@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/mapper"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/mapper"
 )
 
-// Release is seekbrr's canonical, deterministic normalized release: the
+// Release is harbrr's canonical, deterministic normalized release: the
 // parity-comparison unit produced from one extracted+filtered field row. It
 // mirrors Jackett's ReleaseInfo (after BaseIndexer.FixResults synthesis) with a
 // FIXED field order and explicit JSON tags so Marshal is byte-deterministic.
@@ -134,7 +134,7 @@ func HandledFields() map[string]struct{} {
 }
 
 // Default volume factor when a definition does not extract the field. Jackett's
-// downstream consumers treat an unset factor as 1.0 (full count); seekbrr makes
+// downstream consumers treat an unset factor as 1.0 (full count); harbrr makes
 // that explicit so a real freeleech 0.0 is distinguishable from "absent".
 const defaultVolumeFactor = 1.0
 

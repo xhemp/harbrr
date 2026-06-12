@@ -1,6 +1,6 @@
 // Package search executes a search against a tracker, pages, and collects rows.
 //
-// One stage of the seekbrr Cardigann engine pipeline. It is the executor half:
+// One stage of the harbrr Cardigann engine pipeline. It is the executor half:
 // it builds the per-path search request from the definition + query (request.go),
 // runs it through the injected Doer, and parses the response body into normalized
 // releases (fields.go), reproducing Jackett CardigannIndexer.PerformQuery /
@@ -13,11 +13,11 @@ import (
 	stdhttp "net/http"
 	"time"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/filter"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/login"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
 )
 
 // responseTypeJSON is the Response.Type that selects the JSON parser; everything

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // Query is the parsed search request the engine drives a definition with. It is
-// the seekbrr-internal equivalent of Jackett's TorznabQuery, reduced to the
+// the harbrr-internal equivalent of Jackett's TorznabQuery, reduced to the
 // fields the request-building and row-filter stages read. Empty fields render to
 // "" in templates (matching Jackett's null-to-empty coercion), so a zero Query is
 // a valid "raw RSS" search.
@@ -53,7 +53,7 @@ func (q Query) isIDSearch() bool {
 }
 
 // keywords reproduces Jackett's KeywordTokens join: Q + Series + Movie + Year +
-// Episode, whitespace-joined. seekbrr models Keywords as the already-joined term,
+// Episode, whitespace-joined. harbrr models Keywords as the already-joined term,
 // so this simply trims; the Year token is appended when present (the only extra
 // token the corpus request templates rely on beyond the bare term).
 func (q Query) keywords() string {

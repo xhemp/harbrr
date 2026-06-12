@@ -3,7 +3,7 @@ package selector
 import (
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 func firstJSONRow(t *testing.T, fixture, rowsSel string) Row {

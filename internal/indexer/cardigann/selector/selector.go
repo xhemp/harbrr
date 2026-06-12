@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // ErrSelectorNoMatch reports that a required selector found nothing. Callers

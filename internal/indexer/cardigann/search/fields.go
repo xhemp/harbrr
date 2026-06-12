@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/filter"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/selector"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // optionalFields mirrors Jackett's OptionalFields: fields treated as optional

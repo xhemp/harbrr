@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // knownDefBugs are templates whose upstream Jackett definition is malformed in a

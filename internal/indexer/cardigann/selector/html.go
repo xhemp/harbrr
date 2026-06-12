@@ -9,7 +9,7 @@ import (
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // htmlNode adapts a goquery.Selection (one element) to the node interface. All

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // TestCorpusCensus is the headline gate: it loads every vendored definition,

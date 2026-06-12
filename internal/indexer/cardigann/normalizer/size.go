@@ -8,7 +8,7 @@ import (
 
 // sizeStep is the single 1024 multiplier Jackett applies per magnitude in its
 // BytesFromKB/MB/GB/TB chain. The whole chain runs in float32 (each helper
-// takes a float and multiplies by 1024f), so seekbrr must compute in float32
+// takes a float and multiplies by 1024f), so harbrr must compute in float32
 // too — a float64 computation diverges from Jackett's truncated int64 by tens
 // of bytes at GB/TB magnitudes, which would silently bake a non-Jackett value
 // into the parity-comparison unit.

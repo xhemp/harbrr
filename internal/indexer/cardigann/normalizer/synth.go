@@ -7,7 +7,7 @@ import (
 
 // publicTrackers is the tracker list Jackett's MagnetUtil appends when
 // synthesising a public magnet from an info hash, kept byte-for-byte so a
-// seekbrr-synthesised magnet matches Jackett's. Source:
+// harbrr-synthesised magnet matches Jackett's. Source:
 // src/Jackett.Common/Utils/MagnetUtil.cs _Trackers.
 var publicTrackers = []string{
 	"udp://tracker.opentrackr.org:1337/announce",

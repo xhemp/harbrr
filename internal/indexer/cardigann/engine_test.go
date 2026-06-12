@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // engineReplay is an offline Doer that serves a saved body for every request and

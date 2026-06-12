@@ -106,7 +106,7 @@ func TestRedactHeader(t *testing.T) {
 		"Cookie":        {"session=abc123; uid=42"},
 		"Set-Cookie":    {"session=xyz; HttpOnly"},
 		"Content-Type":  {"text/html"},
-		"User-Agent":    {"seekbrr/1.0"},
+		"User-Agent":    {"harbrr/1.0"},
 	}
 	out := RedactHeader(in)
 
@@ -120,8 +120,8 @@ func TestRedactHeader(t *testing.T) {
 	if got := out.Get("Content-Type"); got != "text/html" {
 		t.Errorf("Content-Type = %q, want text/html", got)
 	}
-	if got := out.Get("User-Agent"); got != "seekbrr/1.0" {
-		t.Errorf("User-Agent = %q, want seekbrr/1.0", got)
+	if got := out.Get("User-Agent"); got != "harbrr/1.0" {
+		t.Errorf("User-Agent = %q, want harbrr/1.0", got)
 	}
 
 	// Input must not be mutated.

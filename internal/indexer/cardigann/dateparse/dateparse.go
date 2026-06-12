@@ -10,7 +10,7 @@ import (
 // canonicalLayout is the canonical RFC3339 output both ParseDate and
 // ParseRelTime emit (2006-01-02T15:04:05Z07:00). The engine's normalizer and the
 // Torznab serializer consume this single shape; Jackett emits RFC1123Z, but
-// seekbrr standardizes on RFC3339 internally and serializes per-protocol later.
+// harbrr standardizes on RFC3339 internally and serializes per-protocol later.
 const canonicalLayout = time.RFC3339
 
 // ErrUnparseable is the sentinel for a value the parser could not interpret with

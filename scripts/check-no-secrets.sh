@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit backstop: refuse to commit obvious tracker secrets. Runs alongside
-# gitleaks; this is a cheap, targeted net for the credential shapes seekbrr
+# gitleaks; this is a cheap, targeted net for the credential shapes harbrr
 # handles (passkeys in URLs, Bearer tokens). See AGENTS.md.
 set -euo pipefail
 

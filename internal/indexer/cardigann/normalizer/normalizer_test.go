@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/mapper"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/mapper"
 )
 
 // fakeCategoryMap builds a real mapper.CategoryMap from (trackerID -> category

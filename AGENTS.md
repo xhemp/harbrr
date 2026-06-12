@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Repo rules for AI agents (Claude Code, etc.) and contributors working on **seekbrr** — a Go,
+Repo rules for AI agents (Claude Code, etc.) and contributors working on **harbrr** — a Go,
 single-binary, Cardigann-compatible Torznab/Newznab search provider for the autobrr family. Read this
 fully before editing. The full design is in `@docs/ideas.md`; the build checklist in `@docs/plan.md`.
 
 ## Prime directive
 
-seekbrr's entire value is **behavioral parity with Jackett's Cardigann engine on the same input**.
+harbrr's entire value is **behavioral parity with Jackett's Cardigann engine on the same input**.
 The build order retires that risk first: **test harness first, engine second, product third**
 (`docs/plan.md`). Do not build product surface (UI, app-sync, migration) before the engine passes its
 parity gate (the "Definition of done" in `docs/ideas.md`).
@@ -16,7 +16,7 @@ parity gate (the "Definition of done" in `docs/ideas.md`).
 - Stay inside the requested scope. Do not implement review-suggested or extra changes without
   explicit approval.
 - Treat other agent / CodeRabbit / reviewer feedback as input to discuss, not automatic action.
-- seekbrr is single-user self-hosted software. Prefer readable, maintainable code over paranoid
+- harbrr is single-user self-hosted software. Prefer readable, maintainable code over paranoid
   guards for impossible states.
 - Work **one `docs/plan.md` item at a time**; check its box only when its tests are green.
 
@@ -33,7 +33,7 @@ parity gate (the "Definition of done" in `docs/ideas.md`).
 
 ## Repo map
 
-- Entry: `cmd/seekbrr`
+- Entry: `cmd/harbrr`
 - Engine — a compiler-style pipeline, one package per stage under `internal/indexer/cardigann/`:
   `loader → mapper → template → filter → selector → dateparse → regexadapter → login → search →
   normalizer`; the serializer is `internal/torznab`. Keep stages decoupled; each owns its fixtures.
@@ -51,7 +51,7 @@ shape, read `docs/architecture.md`.
 
 ## Required commands
 
-- Build: `make build` (Go binary to `bin/seekbrr`)
+- Build: `make build` (Go binary to `bin/harbrr`)
 - Tests: `make test` — `go test -race -count=1 ./...`. **Always `-race -count=1`.**
 - Lint: `make lint` · auto-fix: `make lint-fix`
 - Format: `make fmt` (gofumpt + goimports)

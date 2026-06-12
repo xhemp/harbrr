@@ -8,7 +8,7 @@ import (
 // coerceLong reproduces Jackett's ParseUtil.CoerceLong: keep only digits, '.'
 // and ',', map a leading '-' run to zero, treat thousands separators as noise,
 // and parse the integer part. Jackett feeds the .NET parser NumberStyles.Any
-// with InvariantCulture; for the integer fields seekbrr models (seeders,
+// with InvariantCulture; for the integer fields harbrr models (seeders,
 // leechers, files, grabs, year, minimumseedtime) only the integer magnitude is
 // meaningful, so we drop any fractional tail rather than reject the value.
 // Unparseable input coerces to 0 (lenient), matching Jackett's "-" -> 0 cases.
@@ -17,7 +17,7 @@ func coerceLong(s string) int64 {
 	// NumberStyles.Any: every '.'/',' is treated as a thousands group separator,
 	// so the integer value is the concatenation of all digits. (The lone "both
 	// separators present" branch in Jackett produces a parse that still groups;
-	// for the integer fields seekbrr models this collapses to the same result.)
+	// for the integer fields harbrr models this collapses to the same result.)
 	// A bare '-'/'---' yields no digits -> 0, matching Jackett's documented case.
 	intPart := stripSeparators(keepNumeric(s))
 	if intPart == "" {

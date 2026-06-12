@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/dateparse"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/dateparse"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // fixedClock returns a deterministic clock so missing-year and relative-time math

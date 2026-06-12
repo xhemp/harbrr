@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // Capabilities is the typed capabilities model produced by the mapper stage.

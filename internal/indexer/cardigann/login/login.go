@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	apphttp "github.com/autobrr/seekbrr/internal/http"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	apphttp "github.com/autobrr/harbrr/internal/http"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // Typed errors. Callers (item 10) branch on these to decide whether to surface a

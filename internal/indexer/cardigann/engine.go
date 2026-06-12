@@ -6,14 +6,14 @@ import (
 	stdhttp "net/http"
 	"time"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/dateparse"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/filter"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/login"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/mapper"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/search"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/dateparse"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/mapper"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
 )
 
 // Query and Release re-export the search/normalizer types so engine callers

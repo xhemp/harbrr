@@ -3,7 +3,7 @@ package cardigann
 import (
 	"testing"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // TestEngineConstructionCensus is the headline corpus gate: every vendored

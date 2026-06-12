@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	apphttp "github.com/autobrr/seekbrr/internal/http"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/selector"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	apphttp "github.com/autobrr/harbrr/internal/http"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // loginPost assembles Login.Inputs (template-rendered) and POSTs them as a form

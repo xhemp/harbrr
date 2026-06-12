@@ -3,7 +3,7 @@ package selector
 import (
 	"sort"
 
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
 // caseEntry is a single switch arm of a SelectorBlock.Case.

@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	apphttp "github.com/autobrr/seekbrr/internal/http"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/loader"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/login"
-	"github.com/autobrr/seekbrr/internal/indexer/cardigann/template"
+	apphttp "github.com/autobrr/harbrr/internal/http"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // builtRequest is one fully resolved search request: its method, absolute URL,
