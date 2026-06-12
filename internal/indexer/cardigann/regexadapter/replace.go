@@ -15,8 +15,10 @@ import (
 // match through expandDotNetReplacement, the single source of .NET token truth:
 //
 //	$$        literal "$"
-//	$N $NN    capture group N (greedy over the longest digit run that names a
-//	          VALID group; .NET falls back to a shorter run, else literal)
+//	$N $NN    capture group N. .NET reads ALL digits after '$' as a single group
+//	          number; there is no greedy fallback to a shorter run. If that one
+//	          number names no valid group, the entire "$<digits>" is literal text
+//	          (use "${1}1" to force group 1 followed by a literal "1").
 //	${name}   capture group by name or number; invalid -> literal token
 //	$&        whole match (group 0)
 //	$`        input text to the left of the match
