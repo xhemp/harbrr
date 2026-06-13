@@ -189,8 +189,9 @@ func TestParseResponse_ResultOrder(t *testing.T) {
 // (2023) rather than empty. This locks the clock->template seam, which is
 // otherwise invisible (the clock only reaching dateparse would leave .Today empty).
 //
-// The default renders "2023-01-01", which the implicit date parse (Jackett's
-// ParseFields case "date" -> FromUnknown) canonicalises to RFC3339.
+// The default renders "{{ .Today.Year }}-01-01". The fixed clock is in January,
+// so Jackett's .Today.Year quirk reports the PREVIOUS year (2022), and the
+// implicit date parse (case "date" -> FromUnknown) canonicalises it to RFC3339.
 func TestParseResponse_TodayDefault(t *testing.T) {
 	t.Parallel()
 	eng := newFixtureEngine(t, "today_default.yml")
@@ -202,8 +203,8 @@ func TestParseResponse_TodayDefault(t *testing.T) {
 	if len(releases) != 1 {
 		t.Fatalf("releases = %d, want 1", len(releases))
 	}
-	if releases[0].PublishDate != "2023-01-01T00:00:00Z" {
-		t.Errorf("publishDate = %q, want 2023-01-01T00:00:00Z (fixed-clock .Today.Year, canonicalised)", releases[0].PublishDate)
+	if releases[0].PublishDate != "2022-01-01T00:00:00Z" {
+		t.Errorf("publishDate = %q, want 2022-01-01T00:00:00Z (January .Today.Year quirk -> 2022, canonicalised)", releases[0].PublishDate)
 	}
 }
 
