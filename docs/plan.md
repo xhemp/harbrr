@@ -51,7 +51,7 @@ decoupled.
 - [ ] Pass the **compatibility matrix** offline rows (each archetype has a fixture):
   - [x] HTML / form login
   - [ ] HTML / cookie login
-  - [ ] JSON-API
+  - [x] JSON-API
   - [ ] XML / Newznab
   - [x] non-Latin-script (regexp2 path)
   - [x] freeleech (download/uploadvolumefactor)
