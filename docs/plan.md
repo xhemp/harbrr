@@ -24,20 +24,20 @@ Legend: `[ ]` todo · `[x]` done · each leaf should land in its own focused com
 Build the pipeline stage by stage, each table-driven-tested with its own fixtures. Keep stages
 decoupled.
 
-- [ ] **loader** — parse + schema-validate a definition into a typed model; precedence dropin > vendor
-- [ ] **mapper** — capabilities document + category mapping (Newznab category system)
-- [ ] **template** — Go `text/template` with .NET-equivalent truthiness (empty-vs-missing)
-- [ ] **filter** — the bounded filter registry; start with the 6 dominant ops (`re_replace`, `replace`,
+- [x] **loader** — parse + schema-validate a definition into a typed model; precedence dropin > vendor
+- [x] **mapper** — capabilities document + category mapping (Newznab category system)
+- [x] **template** — Go `text/template` with .NET-equivalent truthiness (empty-vs-missing)
+- [x] **filter** — the bounded filter registry; start with the 6 dominant ops (`re_replace`, `replace`,
       `append`, `dateparse`, `regexp`, `querystring`), then the tail
-- [ ] **selector** — HTML (`cascadia`/`goquery`) + JSON selection; start the standing selector fixture
+- [x] **selector** — HTML (`cascadia`/`goquery`) + JSON selection; start the standing selector fixture
       suite (vs Jackett semantics)
-- [ ] **dateparse** — .NET format strings → Go layout; cover timezones, relative dates, localized names
-- [ ] **regexadapter** — RE2 default; route to `regexp2` on opt-in / non-Latin `language:` / RE2
+- [x] **dateparse** — .NET format strings → Go layout; cover timezones, relative dates, localized names
+- [x] **regexadapter** — RE2 default; route to `regexp2` on opt-in / non-Latin `language:` / RE2
       compile-failure / .NET-only constructs; run both engines on shared fixtures
-- [ ] **login/session executor** — `form`/`post`/`get`/`cookie`, CSRF, cookie jar, re-login;
+- [x] **login/session executor** — `form`/`post`/`get`/`cookie`, CSRF, cookie jar, re-login;
       manual-cookie fallback. Test offline against saved login sequences
-- [ ] **normalizer** — produce normalized release objects (canonical, deterministic JSON)
-- [ ] Engine assembles the stages end-to-end on a saved response
+- [x] **normalizer** — produce normalized release objects (canonical, deterministic JSON)
+- [x] Engine assembles the stages end-to-end on a saved response
 
 ## Phase 2 — Offline parity — *the gate*
 
