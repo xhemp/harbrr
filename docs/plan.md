@@ -59,7 +59,7 @@ decoupled.
   - [x] date-heavy (multiple .NET formats + relative)
   - [x] magnet-only (magnet/infohash synthesis)
   - [x] download-link pre-request
-- [ ] **Success criteria met:** 100% defs load w/o panic · zero silent schema failures (triaged to a
+- [x] **Success criteria met:** 100% defs load w/o panic · zero silent schema failures (triaged to a
       visible skip-list) · ported Jackett tests pass · matches Jackett on ≥25 saved fixtures · secrets
       redacted in logs · broken indexers degrade cleanly
 
