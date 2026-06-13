@@ -188,6 +188,9 @@ func TestParseResponse_ResultOrder(t *testing.T) {
 // default "{{ .Today.Year }}-01-01", which must render the fixed-clock year
 // (2023) rather than empty. This locks the clock->template seam, which is
 // otherwise invisible (the clock only reaching dateparse would leave .Today empty).
+//
+// The default renders "2023-01-01", which the implicit date parse (Jackett's
+// ParseFields case "date" -> FromUnknown) canonicalises to RFC3339.
 func TestParseResponse_TodayDefault(t *testing.T) {
 	t.Parallel()
 	eng := newFixtureEngine(t, "today_default.yml")
@@ -199,8 +202,29 @@ func TestParseResponse_TodayDefault(t *testing.T) {
 	if len(releases) != 1 {
 		t.Fatalf("releases = %d, want 1", len(releases))
 	}
-	if releases[0].PublishDate != "2023-01-01" {
-		t.Errorf("publishDate = %q, want 2023-01-01 (fixed-clock .Today.Year)", releases[0].PublishDate)
+	if releases[0].PublishDate != "2023-01-01T00:00:00Z" {
+		t.Errorf("publishDate = %q, want 2023-01-01T00:00:00Z (fixed-clock .Today.Year, canonicalised)", releases[0].PublishDate)
+	}
+}
+
+// TestParseResponse_ImplicitDate proves Jackett's ParseFields case "date":
+// a date field with NO explicit dateparse filter is still run through FromUnknown
+// (harbrr's ParseRelTime). A raw "2 hours ago" must canonicalise against the
+// fixed clock (2023-01-02T00:00:00Z) rather than passing through verbatim. This
+// fails without the implicit-date step.
+func TestParseResponse_ImplicitDate(t *testing.T) {
+	t.Parallel()
+	eng := newFixtureEngine(t, "implicit_date.yml")
+
+	releases, err := eng.ParseResponse(readBody(t, "implicit_date.html"), "")
+	if err != nil {
+		t.Fatalf("ParseResponse: %v", err)
+	}
+	if len(releases) != 1 {
+		t.Fatalf("releases = %d, want 1", len(releases))
+	}
+	if releases[0].PublishDate != "2023-01-01T22:00:00Z" {
+		t.Errorf("publishDate = %q, want 2023-01-01T22:00:00Z (\"2 hours ago\" from the fixed clock)", releases[0].PublishDate)
 	}
 }
 
