@@ -59,8 +59,9 @@ func runOracle(t *testing.T, name string) []oracleRelease {
 }
 
 // TestJackettOracleHTML ports CardigannIndexerHtmlTests.TestCardigannHtmlAsync.
-// Every assertion below is Jackett's, transcribed. Gain (Jackett 23.4375) is
-// omitted: it is derived from size and volume factors and is not a harbrr field.
+// Every assertion below is Jackett's, transcribed. Jackett assertions with no
+// harbrr field equivalent are omitted: Gain (23.4375, derived from size x volume
+// factors) and Guid (== Link; harbrr emits no separate guid field).
 func TestJackettOracleHTML(t *testing.T) {
 	t.Parallel()
 
@@ -89,8 +90,10 @@ func TestJackettOracleHTML(t *testing.T) {
 
 // TestJackettOracleJSON ports CardigannIndexerJsonTests.TestCardigannJsonAsync.
 // Every assertion below is Jackett's. Imdb 9115530 maps to harbrr's tt-prefixed
-// imdbid; null Magnet/InfoHash/MinimumRatio/RageID/TVDBId map to harbrr's
-// empty/zero; Gain is omitted (not a harbrr field).
+// imdbid; Jackett's null Magnet/InfoHash/TVDBId map to harbrr's empty/zero, which
+// ARE asserted. Jackett assertions with no harbrr field equivalent are omitted
+// and NOT asserted: Gain, Guid (== Link), MinimumRatio (== null), RageID
+// (== null).
 func TestJackettOracleJSON(t *testing.T) {
 	t.Parallel()
 

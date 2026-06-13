@@ -75,6 +75,9 @@ decoupled.
 - [ ] **Lazy login**: log in only when a search response looks logged-out (Jackett's behavior), then
       retry once — replacing the eager once-per-Engine login established in Phase 2 (which logs in on
       the first search regardless; see `parity/testdata/README.md` "Eager login")
+- [ ] **.NET-compatible URL encoder**: replace `url.QueryEscape` in the query/path value encoders so
+      `*()'!` match `WebUtility.UrlEncode` (Phase 2 leaves these escaped; see `parity/testdata/README.md`
+      "Known divergences")
 - [ ] Fetch/auth matrix rows as available: Cloudflare/FlareSolverr (pluggable solver) · 2FA/manual-cookie
 - [ ] Docker image + config file
 
@@ -89,6 +92,11 @@ decoupled.
 ## Phase 6 — Scale coverage
 
 - [ ] Broaden response-mode and definition coverage; expand selector/date edge-case fixtures
+- [ ] **Complete the download resolver**: `.DownloadUri` template namespace, `before.inputs`/
+      `before.pathselector`, download-selector template eval, `download.infohash`/`method: post`/
+      `headers`, `testlinktorrent` (Phase 2 ships selectors + `before.path`; see `parity/testdata/README.md`)
+- [ ] **XML backend edge parity**: CDATA / mixed-namespace / AngleSharp-vs-cascadia edge cases beyond the
+      common RSS/Newznab shapes Phase 2 covers
 - [ ] Native **Avistaz** family (post-parity; the one family the corpus doesn't cover)
 
 ## Phase 7 — Product polish

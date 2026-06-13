@@ -68,7 +68,59 @@ Goldens are **not** captured from a live Jackett (project decision; harbrr is
 GPL-2.0, same as Jackett, so porting Jackett's own test material is
 license-compatible). They come from Jackett's asserted values (`jackett-port`)
 or a written hand-derivation (`hand-derived`). Never blindly `-update` a
-`jackett-port` golden — that would let the engine grade its own homework.
+`jackett-port` golden — the harness refuses it.
+
+The two `jackett-port` oracle cases byte-compare their **whole** `golden.json`,
+but only `releases[0]` (and the release count) is anchored to Jackett's own
+assertions in `jackett_oracle_test.go`. Releases `[1..N]` of those goldens are a
+harbrr regression snapshot, not a Jackett oracle — the `jackett-port` label
+covers the count + first release; the remainder is a lock against accidental
+change.
+
+## Known divergences from Jackett
+
+These are deliberate or accepted differences from Jackett's Cardigann engine,
+documented so a passing gate is honest about what it does and does not match.
+None is exercised (and thus hidden) by a fixture authored to dodge it.
+
+- **Eager login** — harbrr logs in before the first search (once per Engine);
+  Jackett logs in lazily on a logged-out response. See "Eager login" above. A
+  login-bearing search case declares the login request(s) as leading steps.
+  Phase 4 plan item: lazy login.
+- **Date canonical form** — RFC3339 vs Jackett's RFC1123Z; see "Date
+  canonicalization". Same instant, different string.
+- **URL encoding of `*()'!`** — both the GET-query encoder (`encodeOrdered`) and
+  the search-path value encoder use Go's `url.QueryEscape`, which percent-escapes
+  the sub-delimiters `* ( ) ' !` that .NET's `WebUtility.UrlEncode` leaves
+  literal. Spaces match (`%20` in the path, `+` in the query). So a keyword
+  containing those punctuation characters yields a different — but equivalent —
+  request URL. Phase 4 plan item: a .NET-compatible encoder.
+- **`.Today.Month` / `.Today.Day`** — harbrr exposes these template fields;
+  Jackett seeds only `.Today.Year`. A def referencing them gets a real value in
+  harbrr and `""` in Jackett. No vendored def uses them.
+- **`leechers` field** — harbrr's canonical release includes `leechers`; Jackett's
+  `ReleaseInfo` tracks only `Peers` (= seeders + leechers). A harbrr convenience
+  field with no Jackett equivalent.
+- **Category ordering** — harbrr sorts a release's categories ascending (for a
+  deterministic golden); Jackett's `Category` is a list in insertion order. They
+  agree whenever insertion order is already ascending (as in the JSON oracle,
+  `[2000, 100001]`); a mapping that inserted a custom cat before a standard one
+  would differ in order only.
+- **`rows.attribute` missing without `MissingAttributeEqualsNoResults`** — when a
+  JSON row lacks the `rows.attribute` sub-object, harbrr skips that row; Jackett
+  dereferences null and aborts the whole query unless the flag is set. harbrr
+  degrades cleanly in both cases (only `yts.yml` pairs the two, with the flag on).
+- **Download resolver scope** — `ResolveDownload` covers `before.path/method` +
+  selector `selector/attribute/filters/usebeforeresponse`. Out of scope (a def
+  using these silently misbehaves rather than erroring): the `.DownloadUri`
+  template namespace, `before.inputs`/`before.pathselector`, Go-template
+  evaluation of the download selector string, `download.infohash`,
+  `download.method: post`, `download.headers`, and `testlinktorrent`. Phase 6
+  plan item.
+- **XML backend** — harbrr parses `response.type: xml` into an element tree and
+  queries it with cascadia; Jackett uses AngleSharp's `XmlParser`. The common
+  RSS/Newznab shapes (`<item>`, `<title>`, `<link>`, `torznab:attr`) match;
+  exotic XML (CDATA edge cases, mixed namespaces) is best-effort.
 
 ## Regenerating goldens
 
