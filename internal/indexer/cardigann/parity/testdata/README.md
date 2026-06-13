@@ -83,44 +83,61 @@ These are deliberate or accepted differences from Jackett's Cardigann engine,
 documented so a passing gate is honest about what it does and does not match.
 None is exercised (and thus hidden) by a fixture authored to dodge it.
 
+Every entry carries an explicit **disposition** so the list is a complete
+decision record, not a half-tracked backlog:
+
+- **`[Tracked: Phase N]`** — a real gap with a `docs/plan.md` follow-up item.
+- **`[Deliberate]`** — an intentional design choice; not a gap.
+- **`[Accepted]`** — a difference we choose to keep (harbrr-additive or
+  clean-degradation); no work planned. Revisit only if a vendored def needs it.
+
+Entries:
+
 - **Eager login** — harbrr logs in before the first search (once per Engine);
   Jackett logs in lazily on a logged-out response. See "Eager login" above. A
   login-bearing search case declares the login request(s) as leading steps.
-  Phase 4 plan item: lazy login.
+  **`[Tracked: Phase 4 — lazy login]`**
 - **Date canonical form** — RFC3339 vs Jackett's RFC1123Z; see "Date
-  canonicalization". Same instant, different string.
+  canonicalization". Same instant, different string — a canonical-schema choice,
+  not a parse difference. **`[Deliberate]`**
 - **URL encoding of `*()'!`** — both the GET-query encoder (`encodeOrdered`) and
   the search-path value encoder use Go's `url.QueryEscape`, which percent-escapes
   the sub-delimiters `* ( ) ' !` that .NET's `WebUtility.UrlEncode` leaves
   literal. Spaces match (`%20` in the path, `+` in the query). So a keyword
   containing those punctuation characters yields a different — but equivalent —
-  request URL. Phase 4 plan item: a .NET-compatible encoder.
+  request URL. **`[Tracked: Phase 4 — .NET-compatible encoder]`**
 - **`.Today.Month` / `.Today.Day`** — harbrr exposes these template fields;
   Jackett seeds only `.Today.Year`. A def referencing them gets a real value in
-  harbrr and `""` in Jackett. No vendored def uses them.
+  harbrr and `""` in Jackett. No vendored def uses them, and the extra fields are
+  additive. **`[Accepted: harbrr-additive, no action]`**
 - **`leechers` field** — harbrr's canonical release includes `leechers`; Jackett's
   `ReleaseInfo` tracks only `Peers` (= seeders + leechers). A harbrr convenience
-  field with no Jackett equivalent.
-- **Category ordering** — harbrr sorts a release's categories ascending (for a
-  deterministic golden); Jackett's `Category` is a list in insertion order. They
-  agree whenever insertion order is already ascending (as in the JSON oracle,
-  `[2000, 100001]`); a mapping that inserted a custom cat before a standard one
-  would differ in order only.
+  field (useful for downstream Torznab output) with no Jackett equivalent.
+  **`[Accepted: convenience field, no action]`**
+- **Category ordering** — harbrr sorts a release's categories ascending (a
+  deliberate determinism choice for stable goldens); Jackett's `Category` is a
+  list in insertion order. They agree whenever insertion order is already
+  ascending (as in the JSON oracle, `[2000, 100001]`); a mapping that inserted a
+  custom cat before a standard one would differ in order only.
+  **`[Accepted: determinism choice, no action]`**
 - **`rows.attribute` missing without `MissingAttributeEqualsNoResults`** — when a
   JSON row lacks the `rows.attribute` sub-object, harbrr skips that row; Jackett
   dereferences null and aborts the whole query unless the flag is set. harbrr
-  degrades cleanly in both cases (only `yts.yml` pairs the two, with the flag on).
+  degrades cleanly in both cases (only `yts.yml` pairs the two, with the flag on),
+  consistent with the project's clean-degradation stance.
+  **`[Accepted: clean degradation, no action]`**
 - **Download resolver scope** — `ResolveDownload` covers `before.path/method` +
   selector `selector/attribute/filters/usebeforeresponse`. Out of scope (a def
   using these silently misbehaves rather than erroring): the `.DownloadUri`
   template namespace, `before.inputs`/`before.pathselector`, Go-template
   evaluation of the download selector string, `download.infohash`,
-  `download.method: post`, `download.headers`, and `testlinktorrent`. Phase 6
-  plan item.
+  `download.method: post`, `download.headers`, and `testlinktorrent`.
+  **`[Tracked: Phase 6 — complete the download resolver]`**
 - **XML backend** — harbrr parses `response.type: xml` into an element tree and
   queries it with cascadia; Jackett uses AngleSharp's `XmlParser`. The common
   RSS/Newznab shapes (`<item>`, `<title>`, `<link>`, `torznab:attr`) match;
   exotic XML (CDATA edge cases, mixed namespaces) is best-effort.
+  **`[Tracked: Phase 6 — XML backend edge parity]`**
 
 ## Regenerating goldens
 
