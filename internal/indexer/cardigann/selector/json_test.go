@@ -211,6 +211,81 @@ func TestFieldJSONContainsCondition(t *testing.T) {
 	}
 }
 
+// TestRowsJSONAttribute proves rows.attribute reshapes each row to its
+// sub-object for field extraction, that a ".." field escapes to the full row
+// element, and that a row missing the attribute sub-object is skipped. This is
+// the UNIT3D shape the JSON oracle uses (rows.attribute: attributes).
+func TestRowsJSONAttribute(t *testing.T) {
+	t.Parallel()
+
+	doc := mustParseJSON(t, "attr_rows.json")
+	rows, err := doc.Rows(loader.RowsBlock{Selector: "data", Attribute: "attributes"})
+	if err != nil {
+		t.Fatalf("Rows: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2 (the attribute-less row is skipped)", len(rows))
+	}
+
+	// Fields resolve against the attributes sub-object.
+	name, found, err := New().Field(rows[0], loader.SelectorBlock{Selector: "name"})
+	if err != nil || !found {
+		t.Fatalf("name: found=%v err=%v", found, err)
+	}
+	if name != "Row A" {
+		t.Errorf("name = %q, want Row A", name)
+	}
+
+	// A ".." selector escapes to the full row element, reading a key OUTSIDE
+	// attributes (the top-level id).
+	id, found, err := New().Field(rows[0], loader.SelectorBlock{Selector: "..id"})
+	if err != nil || !found {
+		t.Fatalf("..id: found=%v err=%v", found, err)
+	}
+	if id != "11" {
+		t.Errorf("..id = %q, want 11 (escaped to full row)", id)
+	}
+}
+
+// TestRowsJSONCount proves a rows.count selector that resolves to an integer < 1
+// short-circuits to zero rows (Jackett's count < 1 -> continue), while a count
+// >= 1 leaves the rows intact.
+func TestRowsJSONCount(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero count yields no rows", func(t *testing.T) {
+		t.Parallel()
+		doc := mustParseJSON(t, "zero_count.json")
+		rows, err := doc.Rows(loader.RowsBlock{
+			Selector:  "data",
+			Attribute: "attributes",
+			Count:     &loader.SelectorBlock{Selector: "meta.total"},
+		})
+		if err != nil {
+			t.Fatalf("Rows: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Fatalf("rows = %d, want 0 (count is 0)", len(rows))
+		}
+	})
+
+	t.Run("positive count keeps rows", func(t *testing.T) {
+		t.Parallel()
+		doc := mustParseJSON(t, "attr_rows.json")
+		rows, err := doc.Rows(loader.RowsBlock{
+			Selector:  "data",
+			Attribute: "attributes",
+			Count:     &loader.SelectorBlock{Selector: "meta.total"},
+		})
+		if err != nil {
+			t.Fatalf("Rows: %v", err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("rows = %d, want 2 (count is 2)", len(rows))
+		}
+	})
+}
+
 // TestFieldJSON is the STANDING JSON extraction suite: dotted paths, array
 // indices, leaf coercion, and the case switch with "*", asserted against
 // JToken.ToString() / String.Join semantics.
