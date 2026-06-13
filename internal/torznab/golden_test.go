@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// update regenerates golden files when set (go test -run X -update). Only run it
-// after confirming the produced XML matches the case's oracle; hand-derived and
-// jackett-port goldens must never be blindly refreshed.
+// update regenerates golden files when set (go test -race -count=1 -run X
+// -update). Only run it after confirming the produced XML matches the case's
+// oracle; hand-derived and jackett-port goldens must never be blindly refreshed.
 var update = flag.Bool("update", false, "update golden XML files")
 
 // assertGolden byte-compares got against the golden file at testdata/name,

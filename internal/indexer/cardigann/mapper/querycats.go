@@ -80,6 +80,9 @@ func (m *CategoryMap) trackersForNewznab(newznabCats []int) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	for _, e := range m.entries {
+		if isBlank(e.trackerCategory) { // mirror the blank-id guard in the other lookups
+			continue
+		}
 		if _, ok := want[e.newznabID]; !ok {
 			continue
 		}

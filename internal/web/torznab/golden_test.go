@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// update regenerates golden files (go test -run X -update), after confirming the
-// produced XML matches the hand-derived oracle.
+// update regenerates golden files (go test -race -count=1 -run X -update), after
+// confirming the produced XML matches the hand-derived oracle.
 var update = flag.Bool("update", false, "update golden XML files")
 
 // assertGolden byte-compares got against testdata/name, writing it when -update

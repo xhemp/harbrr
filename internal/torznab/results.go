@@ -157,7 +157,7 @@ func buildItem(feed FeedInfo, r *normalizer.Release, now time.Time) rssItem {
 	item := rssItem{
 		Title:       sanitizeXMLText(r.Title),
 		GUID:        GUIDFor(r),
-		Indexer:     jackettIndexer{ID: feed.IndexerID, Name: feed.Name},
+		Indexer:     jackettIndexer{ID: feed.IndexerID, Name: sanitizeXMLText(feed.Name)},
 		Type:        feed.Type,
 		Comments:    r.Details,
 		PubDate:     formatPubDate(r.PublishDate, now),
