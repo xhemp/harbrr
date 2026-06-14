@@ -144,8 +144,19 @@ func (e *Executor) renderInputs(inputs map[string]loader.Scalar) (url.Values, er
 // block), wrapped into ErrLoginFailed. The message is definition error text, not
 // a credential; the URL is redacted.
 func (e *Executor) checkErrors(l *loader.Login, rawURL string, body []byte, status int) error {
+	// A 401 on a credential-SUBMITTING login (form/post) is an unambiguous auth
+	// failure worth catching even when the def declares no error selector. For a
+	// get/cookie login a 401 is NOT treated as a failure: such a "login" is often a
+	// session/connectivity probe whose endpoint actually authenticates per-request
+	// (e.g. an apikey HEADER that the SEARCH request carries, like DigitalCore's
+	// `login: get /api/v1/torrents` with `search.headers: X-API-KEY`). Jackett
+	// never fails a login on HTTP status — it relies on error selectors — so the
+	// real auth there is validated by the search, not the login probe.
 	if status == stdhttp.StatusUnauthorized {
-		return fmt.Errorf("%w: 401 Unauthorized from %s", ErrLoginFailed, apphttp.RedactURL(rawURL))
+		switch loginMethod(l) {
+		case "form", "post":
+			return fmt.Errorf("%w: 401 Unauthorized from %s", ErrLoginFailed, apphttp.RedactURL(rawURL))
+		}
 	}
 	if len(l.Error) == 0 {
 		return nil
