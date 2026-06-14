@@ -36,6 +36,12 @@ const (
 	// category-filters, so its count can be legitimately lower than Prowlarr's).
 	countRatioMin   = 0.50 // min(h,p)/max(h,p) >= this
 	titleJaccardMin = 0.30 // |intersection| / |union| of normalized titles >= this
+	// resultCap is the common Cardigann/Torznab page limit. When BOTH sides return
+	// a full page, the results are a sort-dependent WINDOW of a larger set, so a low
+	// title overlap reflects differing sort config between the two instances (e.g.
+	// DigitalCore's config-driven sort), not a harbrr defect — title Jaccard is not
+	// a valid comparison there, so we fall back to count parity with a caveat.
+	resultCap = 100
 
 	betweenCallsDelay   = 200 * time.Millisecond // harbrr -> Prowlarr spacing
 	betweenTrackerDelay = 500 * time.Millisecond // gentle rate between trackers
@@ -386,10 +392,16 @@ func diffPass(harbrr, prowlarr []result) (bool, string) {
 	if ratio < countRatioMin {
 		return false, fmt.Sprintf("count ratio %.2f < %.2f (harbrr %d, Prowlarr %d)", ratio, countRatioMin, h, p)
 	}
-	if jac < titleJaccardMin {
-		return false, fmt.Sprintf("title Jaccard %.2f < %.2f (harbrr %d, Prowlarr %d)", jac, titleJaccardMin, h, p)
+	if jac >= titleJaccardMin {
+		return true, fmt.Sprintf("count ratio %.2f, title Jaccard %.2f", ratio, jac)
 	}
-	return true, fmt.Sprintf("count ratio %.2f, title Jaccard %.2f", ratio, jac)
+	// Low title overlap but a full page on both sides: a sort-dependent window of a
+	// larger result set (config-driven sort differs between harbrr and Prowlarr).
+	// Titles aren't comparable here; accept on strong count parity with a caveat.
+	if h >= resultCap && p >= resultCap && ratio >= 0.90 {
+		return true, fmt.Sprintf("count parity %.2f at the %d-result page cap; titles incomparable (config-sorted window, Jaccard %.2f)", ratio, resultCap, jac)
+	}
+	return false, fmt.Sprintf("title Jaccard %.2f < %.2f (harbrr %d, Prowlarr %d)", jac, titleJaccardMin, h, p)
 }
 
 func titleJaccard(a, b []result) float64 {

@@ -52,7 +52,15 @@ Per tracker, page-1 only:
 - both empty → **pass** (the tracker had nothing for the query)
 - Prowlarr > 0, harbrr = 0 → **fail**
 - harbrr > 0, Prowlarr = 0 → **pass** (likely a Prowlarr cache miss)
-- otherwise → `min/max count ratio ≥ 0.50` **and** title Jaccard `≥ 0.30`
+- count ratio ≥ 0.50 **and** title Jaccard ≥ 0.30 → **pass**
+- both sides at the 100-result page cap with count ratio ≥ 0.90 but low Jaccard →
+  **pass with a caveat**: a full page is a *sort-dependent window* of a larger
+  result set, and a config-driven sort (e.g. DigitalCore's `sort`/`order`) differs
+  between harbrr and the user's Prowlarr instance, so the two windows don't
+  overlap. Titles can't be compared there; count parity + a non-empty,
+  download-bearing harbrr feed confirm the search works. (Real failures — empty,
+  garbage, or low-count — still fail.)
+- otherwise → **fail**
 
 Tolerances are intentionally loose: live data is non-deterministic and harbrr
 applies category filtering, so its count can be legitimately lower than Prowlarr's.
