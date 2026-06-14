@@ -113,9 +113,10 @@ Phase 3 "search real trackers end-to-end" goal.
       Sonarr/Radarr parses the served caps and completes search → **grab** end-to-end against the live
       trackers (not just a 200 feed), and an offline serializer fuzz/property test asserts arbitrary
       `[]*Release` (scraped-data shapes) always produce well-formed, namespace-bindable XML and never panic
-- [ ] **Lazy login**: log in only when a search response looks logged-out (Jackett's behavior), then
-      retry once — replacing the eager once-per-Engine login established in Phase 2 (which logs in on
-      the first search regardless; see `parity/testdata/README.md` "Eager login")
+- [x] **Lazy login**: re-login + retry once when a search response looks logged-out (Jackett's
+      `CheckIfLoginIsNeeded` via the `login.test` selector / followed redirect — NOT `login.error`).
+      Eager first-login is retained by design (parity goldens); the lazy relogin is the added half.
+      Bounded to one retry (no loop). Done in `search/logout.go` + `engine.go` relogin.
 - [x] **.NET-compatible URL encoder**: replace `url.QueryEscape` in the query/path value encoders so
       they match `WebUtility.UrlEncode` (Phase 2 leaves these escaped; see `parity/testdata/README.md`
       "Known divergences"). Done via `internal/indexer/cardigann/encode`; verified divergence is `!*()`

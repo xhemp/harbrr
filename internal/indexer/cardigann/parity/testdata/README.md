@@ -100,10 +100,16 @@ decision record, not a half-tracked backlog:
 
 Entries:
 
-- **Eager login** — harbrr logs in before the first search (once per Engine);
-  Jackett logs in lazily on a logged-out response. See "Eager login" above. A
-  login-bearing search case declares the login request(s) as leading steps.
-  **`[Tracked: Phase 5 — lazy login]`**
+- **Eager first login + lazy relogin** — harbrr logs in before the FIRST search
+  (once per Engine), where Jackett logs in at configure time. This first-login
+  divergence is unchanged: a login-bearing search case still declares the login
+  request(s) as leading steps. Phase 5 adds the lazy half: a search response that
+  looks logged-out (the `login.test` selector absent from an HTML body, which also
+  covers a followed redirect to the login page) triggers exactly one re-login and
+  one retry, matching Jackett's `CheckIfLoginIsNeeded -> DoLogin -> re-request`.
+  Detection uses `login.test` (NOT `login.error`); JSON/XML responses only relogin
+  on the (followed) redirect case. **`[Resolved: Phase 5 — lazy relogin; eager
+  first login retained by design]`**
 - **Date canonical form** — RFC3339 vs Jackett's RFC1123Z; see "Date
   canonicalization". Same instant, different string — a canonical-schema choice,
   not a parse difference. **`[Deliberate]`**

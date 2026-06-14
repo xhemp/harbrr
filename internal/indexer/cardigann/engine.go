@@ -203,19 +203,30 @@ func (e *Engine) Search(query Query) ([]*Release, error) {
 		return nil, fmt.Errorf("cardigann: login for %q: %w", e.def.ID, err)
 	}
 	releases, err := search.Execute(e.def, query, e.login.Session(), e.doer, e.deps)
+	if errors.Is(err, search.ErrSearchLoggedOut) {
+		// Lazy login: the session expired since the eager first login. Re-login
+		// once and retry the search a single time (Jackett's
+		// CheckIfLoginIsNeeded -> DoLogin -> re-request). The retry is bounded to
+		// one attempt: a second logged-out result is returned as the error below,
+		// never looped.
+		if rerr := e.relogin(); rerr != nil {
+			return nil, fmt.Errorf("cardigann: re-login for %q after session expiry: %w", e.def.ID, rerr)
+		}
+		releases, err = search.Execute(e.def, query, e.login.Session(), e.doer, e.deps)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("cardigann: search for %q: %w", e.def.ID, err)
 	}
 	return releases, nil
 }
 
-// ensureSession logs in at most once per Engine. Jackett logs in at configure
-// time and reuses the session across searches; harbrr defers login to the first
-// search and memoizes it, so a reused Engine does not re-run the login sequence
-// on every query (which, for the many private defs without a login.test block,
-// would mean a full login POST per search — a live login-rate hazard). Detecting
-// an expired session in a search response and re-logging-in is the Phase 4
-// lazy-login item; until then the session is established once.
+// ensureSession logs in at most once per Engine for the FIRST search. Jackett
+// logs in at configure time and reuses the session across searches; harbrr defers
+// login to the first search and memoizes it, so a reused Engine does not re-run
+// the login sequence on every query (which, for the many private defs without a
+// login.test block, would mean a full login POST per search — a live login-rate
+// hazard). A session that later expires is handled lazily by relogin (below),
+// triggered when a search response looks logged-out.
 func (e *Engine) ensureSession() error {
 	e.loginMu.Lock()
 	defer e.loginMu.Unlock()
@@ -224,6 +235,26 @@ func (e *Engine) ensureSession() error {
 	}
 	if err := e.login.EnsureLoggedIn(e.def); err != nil {
 		return err //nolint:wrapcheck // Search wraps with the def id + "login for".
+	}
+	e.loggedIn = true
+	return nil
+}
+
+// relogin forces a fresh login after a search response looked logged-out, then
+// refreshes the memoized flag. The mutex serializes concurrent relogins on a
+// reused Engine and prevents racing loggedIn; harbrr is single-user, so the brief
+// serialization is fine. Login (not EnsureLoggedIn) is used because the search
+// response already told us the session is gone — re-probing via login.test would
+// only add a redundant request. The retry in Search is bounded to one attempt,
+// so a def whose login.test selector is legitimately absent from a search page
+// (e.g. an AJAX fragment) causes one wasted relogin and a surfaced error, never a
+// loop.
+func (e *Engine) relogin() error {
+	e.loginMu.Lock()
+	defer e.loginMu.Unlock()
+	e.loggedIn = false
+	if err := e.login.Login(e.def); err != nil {
+		return err //nolint:wrapcheck // Search wraps with the def id + "re-login for".
 	}
 	e.loggedIn = true
 	return nil
