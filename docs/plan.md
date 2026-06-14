@@ -90,7 +90,7 @@ config and exits, and the Torznab handler has no production caller.)
       cookie-auth surfaces; the qui auth-disabled / trusted-proxy mode
 - [x] **Wire the server** — mount the Torznab handler (`internal/web/torznab`) **and** the management
       API in `cmd/harbrr serve`; config file + base-path support
-- [ ] **Docker image + config file**
+- [x] **Docker image + config file**
 
 ## Phase 5 — Live smoke (closes the MVP)
 

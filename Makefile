@@ -82,6 +82,15 @@ precommit: fmt lint test
 .PHONY: ci
 ci: vet lint test build
 
+## docker: build the container image
+.PHONY: docker
+docker:
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg DATE=$(DATE) \
+		-t $(BINARY):dev .
+
 ## vendor-defs: refresh the embedded Jackett definition snapshot
 .PHONY: vendor-defs
 vendor-defs:

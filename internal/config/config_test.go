@@ -198,6 +198,21 @@ func TestLoadFlagBeatsEnv(t *testing.T) {
 	}
 }
 
+// TestExampleConfigIsValid keeps the shipped sample config loadable + valid, so it
+// never drifts from the config struct.
+func TestExampleConfigIsValid(t *testing.T) {
+	cfg, err := config.Load(filepath.Join("..", "..", "config.example.yaml"), nil)
+	if err != nil {
+		t.Fatalf("config.example.yaml failed to load/validate: %v", err)
+	}
+	if cfg.Server.Port != 7474 {
+		t.Errorf("example server.port = %d, want 7474", cfg.Server.Port)
+	}
+	if cfg.Auth.Mode != "required" {
+		t.Errorf("example auth.mode = %q, want required", cfg.Auth.Mode)
+	}
+}
+
 func TestLoadExplicitMissingFileErrors(t *testing.T) {
 	if _, err := config.Load(filepath.Join(t.TempDir(), "absent.yaml"), nil); err == nil {
 		t.Fatal("Load() with missing explicit config file = nil, want error")
