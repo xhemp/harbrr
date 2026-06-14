@@ -85,7 +85,7 @@ config and exits, and the Torznab handler has no production caller.)
 - [x] **Indexer instance registry** — add / configure / enable / disable / delete a configured indexer
       (definition id + settings + encrypted credentials) and resolve an id → engine. This is the
       production `Provider` the Torznab handler already expects, and the core of a Prowlarr-style manager
-- [ ] **Management API + auth** — grow the hand-authored `openapi.yaml` past `/healthz` (indexer CRUD,
+- [x] **Management API + auth** — grow the hand-authored `openapi.yaml` past `/healthz` (indexer CRUD,
       settings, API-key management); first-run setup; server-side sessions + `X-API-Key`; CSRF on
       cookie-auth surfaces; the qui auth-disabled / trusted-proxy mode
 - [ ] **Wire the server** — mount the Torznab handler (`internal/web/torznab`) **and** the management

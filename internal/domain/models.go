@@ -23,6 +23,26 @@ type IndexerInstance struct {
 	UpdatedAt    time.Time
 }
 
+// User is harbrr's admin account. First-run setup creates exactly one. The
+// password is stored only as an argon2id PHC hash — never recoverable.
+type User struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// APIKey is a management/Torznab API key. Only its SHA-256 hash is stored; the
+// plaintext is shown once at mint time. LastUsedAt is nil until first use.
+type APIKey struct {
+	ID         int64
+	Name       string
+	KeyHash    string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
 // IndexerSetting is one configured setting of an instance. A secret setting
 // (IsSecret) stores its value in ValueEncrypted (base64 nonce‖ciphertext‖tag)
 // with the KeyID that encrypted it and an empty Value; a plaintext setting stores

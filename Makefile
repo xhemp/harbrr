@@ -39,10 +39,10 @@ test:
 test-short:
 	go test -count=1 $(PKG)
 
-## test-openapi: validate the embedded management-API OpenAPI spec
+## test-openapi: validate the embedded management-API OpenAPI spec + handler drift
 .PHONY: test-openapi
 test-openapi:
-	go test -race -count=1 ./internal/web/swagger/...
+	go test -race -count=1 ./internal/web/swagger/... ./internal/web/api/...
 
 ## vet: go vet
 .PHONY: vet
