@@ -150,6 +150,37 @@ func TestLoadFile(t *testing.T) {
 	}
 }
 
+func TestLoadFilePhase4Fields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "harbrr.yaml")
+	body := "server:\n" +
+		"  base_url: /harbrr\n" +
+		"  secure_cookie: true\n" +
+		"secrets:\n" +
+		"  allow_plaintext: true\n" +
+		"auth:\n" +
+		"  mode: disabled\n" +
+		"  ip_allowlist: [\"10.0.0.0/8\", \"127.0.0.1\"]\n" +
+		"  trusted_proxies: [\"172.16.0.0/12\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := config.Load(path, nil)
+	if err != nil {
+		t.Fatalf("Load() = %v", err)
+	}
+	if cfg.Server.BaseURL != "/harbrr" || !cfg.Server.SecureCookie {
+		t.Errorf("server = %+v, want base_url=/harbrr secure_cookie=true", cfg.Server)
+	}
+	if !cfg.Secrets.AllowPlaintext {
+		t.Error("secrets.allow_plaintext not loaded")
+	}
+	if !cfg.Auth.AuthDisabled() || len(cfg.Auth.IPAllowlist) != 2 || len(cfg.Auth.TrustedProxies) != 1 {
+		t.Errorf("auth = %+v, want disabled + 2 allowlist + 1 proxy", cfg.Auth)
+	}
+}
+
 func TestLoadFlagBeatsEnv(t *testing.T) {
 	t.Setenv("HARBRR_SERVER_PORT", "9999")
 

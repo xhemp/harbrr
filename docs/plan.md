@@ -88,7 +88,7 @@ config and exits, and the Torznab handler has no production caller.)
 - [x] **Management API + auth** — grow the hand-authored `openapi.yaml` past `/healthz` (indexer CRUD,
       settings, API-key management); first-run setup; server-side sessions + `X-API-Key`; CSRF on
       cookie-auth surfaces; the qui auth-disabled / trusted-proxy mode
-- [ ] **Wire the server** — mount the Torznab handler (`internal/web/torznab`) **and** the management
+- [x] **Wire the server** — mount the Torznab handler (`internal/web/torznab`) **and** the management
       API in `cmd/harbrr serve`; config file + base-path support
 - [ ] **Docker image + config file**
 
