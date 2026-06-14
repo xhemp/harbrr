@@ -82,7 +82,7 @@ config and exits, and the Torznab handler has no production caller.)
       AES-256-GCM (per-record nonce, AAD = indexer-id + setting, stored `key_id`); web-UI password
       argon2id; API keys SHA-256. Auto-generate a keyfile on first run (encryption always on); fail
       loud on a wrong/changed key
-- [ ] **Indexer instance registry** — add / configure / enable / disable / delete a configured indexer
+- [x] **Indexer instance registry** — add / configure / enable / disable / delete a configured indexer
       (definition id + settings + encrypted credentials) and resolve an id → engine. This is the
       production `Provider` the Torznab handler already expects, and the core of a Prowlarr-style manager
 - [ ] **Management API + auth** — grow the hand-authored `openapi.yaml` past `/healthz` (indexer CRUD,

@@ -5,25 +5,30 @@ import (
 	"database/sql"
 )
 
+// Execer is the three query operations shared by the database handle and a
+// transaction. Repository methods take an Execer, so the same method runs
+// standalone (passed the *DB) or inside a transaction (passed the TxQuerier) —
+// which is how the registry inserts an instance and its settings atomically.
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // Querier is the read/write seam every repository depends on, so the concrete
 // store can be swapped without touching call sites. *database.DB satisfies it
 // over SQLite today; a Postgres implementation can satisfy it later without
-// reworking callers (AGENTS.md — interface clean, Postgres deferred). It stays
-// small (4 methods): the four operations a repository actually needs.
+// reworking callers (AGENTS.md — interface clean, Postgres deferred).
 type Querier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	Execer
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (TxQuerier, error)
 }
 
-// TxQuerier is a Querier scoped to a transaction. *sql.Tx satisfies it directly
-// (it already has the three query methods plus Commit/Rollback), so the SQLite
-// store wraps a transaction with zero glue.
+// TxQuerier is an Execer scoped to a transaction. *sql.Tx satisfies it directly
+// (it has the three query methods plus Commit/Rollback), so the SQLite store
+// wraps a transaction with zero glue.
 type TxQuerier interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	Execer
 	Commit() error
 	Rollback() error
 }
