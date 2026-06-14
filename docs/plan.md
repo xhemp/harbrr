@@ -155,7 +155,11 @@ Phase 3 "search real trackers end-to-end" goal.
 - [ ] **Stats / search history** (query/grab/auth event log + query API); **notifications**
       (Discord/webhook, pluggable provider)
 - [ ] **Web UI** — the management dashboard (indexer grid, add/edit forms, manual search, stats);
-      depends on the Phase 4 management API
+      depends on the Phase 4 management API. Includes rendering the embedded OpenAPI spec as Swagger UI
+      (Phase 4 serves the raw spec at `/api/openapi.yaml`).
+- [ ] **OIDC authentication** — fully implement the OIDC login flow stubbed in Phase 4 (the
+      `/api/auth/oidc/*` endpoints return 501 today; only a config seam exists). A qui/autobrr family
+      feature; pairs with the Web UI auth surface.
 - [ ] Postgres behind the existing `dbinterface` (only now)
 
 ---
