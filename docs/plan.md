@@ -307,52 +307,69 @@ path), so item 1 comes first. Pattern reference: [`native-indexer-pattern.md`](n
       FileList — search live-confirmed (int-flags fix #46), Prowlarr differential pending a name match;
       MyAnonamouse — driver + `mam_id` write-back seam (#46) correct, live search/parse `[Tracked: pending a
       fresh dedicated MAM session]` (the stack's session is dead at source — fails in Prowlarr too).
-- [ ] **Coverage analysis across toolsets** (backlog → `docs/coverage.md`) — produce a **tracker × surface ×
-      tool × auth** matrix: for every tracker, which surface each tool covers — **announce** (autobrr,
-      IRC firehose) vs **search** (harbrr / Prowlarr / Jackett, on-demand Torznab) vs **RSS** — and via which
-      credential. autobrr and the search proxies cover *disjoint* surfaces of the same tracker, so the matrix
-      both (a) bounds harbrr's real native-driver backlog vs Prowlarr's full C# set (what's still missing
-      beyond these three) and (b) states honestly where harbrr is not yet a Prowlarr replacement. Drives the
-      native-driver roadmap past IPT/MAM/FileList.
-- [ ] **Live-validation ledger (opportunistic, not a gate)** — the Phase-9 `[Tracked]` retests with no
-      qualifying tracker in the stack (cookie/2FA, .NET-quirk, HTTP/SOCKS proxy) become a standing checklist
-      that ticks when a qualifying tracker appears. All three are offline-proven; none block the alpha.
+- [x] **Coverage analysis across toolsets** (`docs/coverage.md`) — the **tracker × surface × tool × auth**
+      matrix. Key results: harbrr owns the **search** surface (autobrr owns announce — disjoint); a
+      *Prowlarr-native* tracker is **not** a harbrr gap when Jackett ships YAML (harbrr vendors Jackett — e.g.
+      HDSpace). For this stack harbrr covers **all 18 torrent indexers**; only DOGnzb (usenet/Newznab) is out
+      of scope. harbrr's real native backlog = C#-in-both trackers: the **Gazelle-API** family (Redacted/
+      Orpheus/PTP/BTN — one base driver, the highest-leverage next build) + cookie-scrape (TorrentDay/SpeedCD)
+      and passkey (HDBits/BeyondHD) groups, which reuse the IPTorrents/FileList shapes already built.
+- [x] **Live-validation ledger (opportunistic, not a gate)** — the standing checklist of offline-proven
+      patterns awaiting a live qualifying tracker (cookie/2FA, .NET-quirk, HTTP/SOCKS proxy, + MyAnonamouse
+      live search/parse) lives in `internal/smoke/README.md` and `docs/coverage.md` §6. Ticks opportunistically;
+      not a release gate.
 
-## Phase 10 — Product polish
+## Phase 10 — \*arr application sync (Sonarr / Radarr / qui)
 
-- [ ] **\*arr application sync** (qui-as-app): push indexer config into Sonarr/Radarr/Lidarr/… via their
-      API — the sync contract + add/update/remove lifecycle + per-app enable/disable (its own sub-plan; a
-      Prowlarr headline feature)
-- [ ] **Jackett/Prowlarr migration import**: import indexer instances + credentials + category overrides.
-      Read credentials from the **Prowlarr SQLite database** (`prowlarr.db`, the `Indexers.Settings`
-      JSON column), which stores them in plaintext — NOT the REST API, whose `SchemaBuilder` masks
-      `ApiKey`/`Password` fields with `********` (verified against Prowlarr source; see
-      `docs/divergences.md` / the secrets testdata README). Jackett's config encrypts creds per-install
-      (RSA/DPAPI), so a Jackett import falls back to guided re-entry for the protected fields.
-- [ ] Native **harbrr → autobrr push** (closes the RSS-polling gap; family-only win)
-- [ ] cross-seed search backend
-- [ ] **Stats / search history** (query/grab/auth event log + query API; the auth event log populates
-      `api_keys.last_used_at`, left unwritten in Phase 4 to keep validation a pure read); **notifications**
-      (Discord/webhook, pluggable provider)
-- [ ] **Backup / restore** (config + database): scheduled + manual, using the redacted/encrypted export
-      from §9 (secrets redacted by default behind a `<redacted>` sentinel; including secrets is a
-      separately-passphrase-encrypted opt-in)
+The one product feature that makes harbrr a drop-in Prowlarr for the core stack: push indexer config
+into the apps so they don't each configure indexers by hand.
+
+- [ ] **App sync — Sonarr, Radarr, qui** — push indexer config into these three via their API: the sync
+      contract + add/update/remove lifecycle + per-app enable/disable (its own sub-plan; a Prowlarr
+      headline feature). Scoped to **Sonarr/Radarr/qui only** — other \*arrs (Lidarr/Readarr/Mylar/Whisparr)
+      are demand-gated backlog.
+- [ ] **Gate — a legitimate Swagger-only Prowlarr replacement.** With Phase 10 done, harbrr fully replaces
+      this stack's Prowlarr **operated entirely through the Swagger API** at `/api/docs` — no Web UI: add +
+      configure + test every indexer, search, grab through `/dl`, and sync indexers into Sonarr/Radarr/qui,
+      all over HTTP. **This is the alpha's definition of done.** Phase 11 (Web UI) is additive — nicer to
+      use, never required.
+
+## Phase 11 — Web UI
+
 - [ ] **Web UI** — the management dashboard (indexer grid, add/edit forms, manual search, stats);
-      depends on the Phase 4 management API. (Interactive **Swagger UI already shipped** at `/api/docs`,
-      separate from the SPA — the web UI just links to it; raw spec at `/api/openapi.yaml`.)
-- [ ] **User-configurable request rate** — a **global default** rate plus a
-      **per-indexer override** setting. Phase 6 paces per target domain from the def's
-      `requestDelay` (or a 1s default) and is not user-tunable; the
-      `ClientParams.RateInterval` seam already carries the value, so this is a settings
-      surface + plumb-through. Pairs with the management UI / settings.
-- [ ] **OIDC authentication** — fully implement the OIDC login flow stubbed in Phase 4 (the
-      `/api/auth/oidc/*` endpoints return 501 today; only a config seam exists). A qui/autobrr family
-      feature; pairs with the Web UI auth surface.
+      depends on the Phase 4 management API. **Stack: match qui's** — believed Vite + React + Tailwind CSS;
+      **verify against the qui repo during Phase 11 scoping** before committing. (Interactive **Swagger UI
+      already shipped** at `/api/docs`, separate from the SPA — the web UI just links to it; raw spec at
+      `/api/openapi.yaml`.)
 
 ---
 
 ## Beyond the alpha — not scheduled (demand-gated)
 
+Built when a real user needs it, not on a schedule. Each is self-contained and off the alpha→beta
+(Phase 10 app-sync → Phase 11 Web UI) critical path.
+
+- **More \*arr sync targets** — Lidarr / Readarr / Mylar / Whisparr. The Phase-10 sync contract is built
+  for Sonarr/Radarr/qui; extending it to another app is mostly a per-app adapter.
+- **Jackett/Prowlarr migration import** — import indexer instances + credentials + category overrides.
+  Read creds from the **Prowlarr SQLite database** (`prowlarr.db`, the plaintext `Indexers.Settings` JSON
+  column) — NOT the REST API, whose `SchemaBuilder` masks `ApiKey`/`Password` with `********`. Needs a
+  **Prowlarr-impl → harbrr-def name table** for Prowlarr-native trackers harbrr serves as Cardigann (e.g.
+  HDSpace — see `docs/coverage.md` §5). Jackett's RSA/DPAPI-encrypted config falls back to guided re-entry.
+- **Native-driver backlog** — the C#-in-both-engines trackers (`docs/coverage.md` §4): highest-leverage is
+  one **Gazelle-API** base driver (Redacted/Orpheus/PTP/BTN/AnimeBytes); cookie-scrape (TorrentDay/SpeedCD)
+  and passkey (HDBits/BeyondHD) reuse the IPTorrents/FileList shapes. Build per tracker on demand.
+- **harbrr → autobrr push** — closes the RSS-polling gap (family-only win).
+- **cross-seed search backend.**
+- **Stats / search history** (query/grab/auth event log + query API; the auth log populates
+  `api_keys.last_used_at`, left unwritten in Phase 4) **+ notifications** (Discord/webhook, pluggable).
+- **Backup / restore** (config + database): scheduled + manual, using the §9 redacted/encrypted export
+  (secrets behind a `<redacted>` sentinel; including secrets is a separately-passphrase-encrypted opt-in).
+- **OIDC authentication** — implement the flow stubbed in Phase 4 (`/api/auth/oidc/*` return 501 today;
+  only a config seam exists). Pairs with the Web UI auth surface.
+- **User-configurable request rate** — a global default + per-indexer override. Phase 6 paces per target
+  domain from the def's `requestDelay`; the `ClientParams.RateInterval` seam already carries the value, so
+  this is a settings surface + plumb-through. Pairs with the Web UI settings.
 - **Postgres** — **out of the alpha roadmap.** harbrr is single-user self-hosted, where SQLite is the
   right default, not a stopgap; Postgres only earns its keep for shared / multi-instance deployments.
   Build it **when a real multi-instance user needs it**, not on a schedule — there is no committed phase.
