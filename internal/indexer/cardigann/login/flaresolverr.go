@@ -75,14 +75,19 @@ func NewFlareSolverrSolver(baseURL string, maxTimeout time.Duration) *FlareSolve
 // caller surfaces it as ErrSolverRequired -> an anti_bot health event). No secret
 // (the base URL's embedded auth, cookies) is echoed into an error.
 func (s *FlareSolverrSolver) Solve(ctx context.Context, targetURL string) (SolveResult, error) {
+	return s.solve(ctx, flareRequest{Cmd: "request.get", URL: targetURL})
+}
+
+// solve sends one FlareSolverr /v1 request.get and returns the solution's cookies +
+// User-Agent. fr.MaxTimeout is filled here so callers only specify the command and
+// URL. (request.post is intentionally unused: FlareSolverr cannot complete a JS
+// challenge mid-POST — see solveAndRetryLoginPost, which GET-solves then re-POSTs.)
+func (s *FlareSolverrSolver) solve(ctx context.Context, fr flareRequest) (SolveResult, error) {
 	if s.baseURL == "" {
 		return SolveResult{}, fmt.Errorf("%w: flaresolverr_url is not configured", ErrNoSolverConfigured)
 	}
-	reqBody, err := json.Marshal(flareRequest{
-		Cmd:        "request.get",
-		URL:        targetURL,
-		MaxTimeout: int(s.maxTimeout / time.Millisecond),
-	})
+	fr.MaxTimeout = int(s.maxTimeout / time.Millisecond)
+	reqBody, err := json.Marshal(fr)
 	if err != nil {
 		return SolveResult{}, fmt.Errorf("flaresolverr: encode request: %w", err)
 	}
@@ -108,19 +113,19 @@ func (s *FlareSolverrSolver) Solve(ctx context.Context, targetURL string) (Solve
 		return SolveResult{}, fmt.Errorf("flaresolverr: returned HTTP %d", resp.StatusCode)
 	}
 
-	var fr flareResponse
-	if err := json.Unmarshal(body, &fr); err != nil {
+	var resBody flareResponse
+	if err := json.Unmarshal(body, &resBody); err != nil {
 		return SolveResult{}, fmt.Errorf("flaresolverr: decode response: %w", err)
 	}
-	if fr.Status != "ok" {
-		// fr.Message is FlareSolverr-authored; it can name the challenge but is not
-		// echoed here to avoid surfacing any URL/identifier on the error path.
-		return SolveResult{}, fmt.Errorf("flaresolverr: solve did not succeed (status %q)", fr.Status)
+	if resBody.Status != "ok" {
+		// resBody.Message is FlareSolverr-authored; it can name the challenge but is
+		// not echoed here to avoid surfacing any URL/identifier on the error path.
+		return SolveResult{}, fmt.Errorf("flaresolverr: solve did not succeed (status %q)", resBody.Status)
 	}
 
-	cookies := make([]*stdhttp.Cookie, 0, len(fr.Solution.Cookies))
-	for _, c := range fr.Solution.Cookies {
+	cookies := make([]*stdhttp.Cookie, 0, len(resBody.Solution.Cookies))
+	for _, c := range resBody.Solution.Cookies {
 		cookies = append(cookies, &stdhttp.Cookie{Name: c.Name, Value: c.Value}) //nolint:gosec // request cookie; Set-Cookie security attrs are N/A
 	}
-	return SolveResult{Cookies: cookies, UserAgent: fr.Solution.UserAgent}, nil
+	return SolveResult{Cookies: cookies, UserAgent: resBody.Solution.UserAgent}, nil
 }

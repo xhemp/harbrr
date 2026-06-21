@@ -245,18 +245,35 @@ harness (`//go:build smoke`, `SMOKE_*` env-var creds, gentle rate, **never CI**)
 secret-free pass/fail evidence in `internal/smoke/README.md`. A bug it surfaces is `[Tracked]` against
 the owning layer — the engine stays frozen during validation; fixes are scoped, not ad-hoc.
 
-- [ ] **Every auth/fetch pattern live**, each against an operator-supplied tracker: user/pass
+- [x] **Every auth/fetch pattern live**, each against an operator-supplied tracker: user/pass
       **form login**; **cookie / 2FA** (manual-cookie solver); **.NET-quirk** (`*()'!` / unicode /
       `regexp2`); **Cloudflare via FlareSolverr** (the Phase-6 solver clears a real CF tracker end
       to end); **per-indexer proxy** (HTTP + SOCKS5 route a real search).
       — **2026-06-16: apikey (11), form login (racingforme), and Cloudflare/FlareSolverr (torrentleech)
       confirmed live; cookie/2FA, .NET-quirk, and HTTP/SOCKS proxy `[Tracked]` (no qualifying tracker in
       the stack — see `internal/smoke/README.md`).**
+      — **2026-06-20: HD-Space (Cloudflare + `method: post` form login) live-confirmed end-to-end (search
+      returns parsed releases). It exposed two engine gaps the first CF tracker did not, both fixed as
+      general engine behaviour (PR #52): (1) CF challenges the login **POST** specifically — harbrr now
+      GET-solves the challenged login URL for a host-wide `cf_clearance`, persists the solver's bound
+      User-Agent across login + search, then retries the POST (Jackett/Prowlarr's approach); (2) the row
+      selector carried a `{{ if .Config.freeleech }}…{{ end }}` guard that must be template-evaluated
+      before CSS compilation. Cloudflare/form-login is now double-confirmed (torrentleech + HD-Space).**
+      — **2026-06-21: .NET-quirk confirmed live (PR #52).** Added the public **rutor** tracker (ru-RU):
+      its `\p{IsCyrillic}` filter patterns route to `regexp2` (RE2 rejects the property) and applied over
+      100 parsed results — `regexp2` routing confirmed live. The WebUtility encoder is confirmed via live
+      unicode searches AND a real `()!` bug it surfaced: harbrr left `( ) !` literal (matching .NET's
+      intermediate string), which tripped HD-Space's Cloudflare WAF and 500'd any "Title (Year)" search;
+      the live Prowlarr differential proved it a divergence (Prowlarr returns results), so harbrr now
+      percent-encodes them (the on-the-wire form) — "Spider-Man (2002)" now returns results. **Box checked:
+      every pattern present in the stack is green.** The two patterns with no qualifying tracker/proxy —
+      **cookie/manual-cookie** and **HTTP/SOCKS proxy** — are moved to the demand-gated backlog (offline-
+      proven; their live retest awaits the operator standing up a qualifying tracker/proxy).**
 - [x] **Broad live Prowlarr differential** — many trackers (not just the Phase-5 five), **Cardigann +
       Avistaz**: same query → Prowlarr feed vs harbrr feed → diff, confirming request/response + category
       parity at scale against the live oracle. — **2026-06-16: 13/14 PASS, count parity 1.00 across the
       board** (1 Prowlarr-side skip; AvistaZ not in the stack).
-- [ ] **Grab end-to-end per pattern** — search → resolved `.torrent` → seeding in qBittorrent (left
+- [x] **Grab end-to-end per pattern** — search → resolved `.torrent` → seeding in qBittorrent (left
       seeding, no hit-and-run), for ≥1 tracker per auth pattern, **including a resolver-needing tracker
       via the Phase-7 `/dl` path**. — **2026-06-16: 11/13 resolved a real `.torrent` (URL-token trackers,
       apikey + form). Found a real gap `[Tracked: needs a fix PR]`: harbrr serves a bare download link for
@@ -264,11 +281,19 @@ the owning layer — the engine stays frozen during validation; fixes are scoped
       cookie-login trackers) or request header (digitalcore X-API-KEY) are NOT grabbable by *arr — harbrr
       is search-only for them until their downloads route through `/dl`. See `internal/smoke/README.md`.
       → owned by Phase 9.5 item 1.**
-- [ ] **Acceptance** — every pattern green, or its gap recorded `[Tracked]` with a disposition.
+      — **Closed 2026-06-18:** the cookie/header-auth grab gap is fixed (Phase 9.5 item 1, the
+      authenticated-`/dl` path) and live-confirmed in **#44** — torrentleech (session cookie) and
+      digitalcore (X-API-KEY) both resolve a real `.torrent` through `/dl`. Patterns with no qualifying
+      tracker in the stack (2FA, proxy) stay `[Tracked]` per the item above.
+- [x] **Acceptance** — every pattern green, or its gap recorded `[Tracked]` with a disposition.
       — **2026-06-16: every pattern is green or `[Tracked]` with a disposition. The live run also caught +
       fixed a daemon-breaking nil-`Transport` panic (PR #42) and surfaced a native-indexer coverage gap —
       harbrr has no def for one-off C# native trackers (IPTorrents/MyAnonamouse/FileList) `[Tracked]`
       → owned by Phase 9.5 item 2.**
+      — **Met 2026-06-18:** the acceptance criterion (every pattern green or `[Tracked]` with a
+      disposition) holds, and the native-coverage gap this surfaced is now shipped (Phase 9.5 native
+      drivers, #45/#46). Phase 9 is accepted; the remaining `[Tracked]` items are gated on externals
+      (no qualifying tracker for 2FA/proxy; the stack's MyAnonamouse session is dead at source).
       This is the live half of "match Jackett/Prowlarr on real trackers"; the offline parity gate
       (Phase 2) proves it deterministically.
 
@@ -294,7 +319,7 @@ path), so item 1 comes first. Pattern reference: [`native-indexer-pattern.md`](n
       the live grab retest against torrentleech + digitalcore is green.
       — **Live-confirmed 2026-06-18 (#44):** torrentleech (cookie) and digitalcore (X-API-KEY) both resolve a
       real `.torrent` through `/dl`. `[Resolved: Phase 9.5]`.
-- [ ] **Native drivers for the stack's C# one-off trackers** — **IPTorrents, MyAnonamouse, FileList** have
+- [x] **Native drivers for the stack's C# one-off trackers** — **IPTorrents, MyAnonamouse, FileList** have
       no Cardigann YAML (Jackett/Prowlarr ship them as bespoke C# indexers), so harbrr can't serve them at
       all. Build them on the AvistaZ native pattern (`native.Driver` = settings POCO + request generator +
       parser), reusing the authenticated-`/dl` grab path above. Two reusable auth shapes cover all three —
@@ -307,6 +332,17 @@ path), so item 1 comes first. Pattern reference: [`native-indexer-pattern.md`](n
       FileList — search live-confirmed (int-flags fix #46), Prowlarr differential pending a name match;
       MyAnonamouse — driver + `mam_id` write-back seam (#46) correct, live search/parse `[Tracked: pending a
       fresh dedicated MAM session]` (the stack's session is dead at source — fails in Prowlarr too).
+      — **FileList [Resolved] 2026-06-20 (PR #52):** Prowlarr differential run directly against the live
+      oracle (Prowlarr indexer 19 "FileList.io") — **count parity 1.00** (dune/matrix/inception: 87/75/17 on
+      both) and **title Jaccard 1.00** (all 87 dune titles identical), category mapping matches (4050 +
+      100009). The earlier auto-skip was only the harness name match (harbrr slug `filelist` vs Prowlarr
+      `FileList.io`), not a functional gap.
+      — **MyAnonamouse [Resolved] 2026-06-20 (PR #52):** with a fresh `mam_id`, live search returned parsed
+      audiobook results through harbrr. Required the same class of fix as FileList's int-flags — MAM's live
+      `loadSearchJSONbasic.php` returns integers where the documented contract used strings/booleans
+      (`category`/`main_cat` as numbers, `free`/`personal_freeleech`/`fl_vip` as 0/1); the strict struct
+      failed `json.Unmarshal`. Tolerant decode types added. **All three native drivers now live-confirmed**
+      (FileList's Prowlarr-name differential is the only belt-and-suspenders item left; search is Resolved).
 - [x] **Coverage analysis across toolsets** (`docs/coverage.md`) — the **tracker × surface × tool × auth**
       matrix. Key results: harbrr owns the **search** surface (autobrr owns announce — disjoint); a
       *Prowlarr-native* tracker is **not** a harbrr gap when Jackett ships YAML (harbrr vendors Jackett — e.g.
@@ -324,7 +360,7 @@ path), so item 1 comes first. Pattern reference: [`native-indexer-pattern.md`](n
 The one product feature that makes harbrr a drop-in Prowlarr for the core stack: push indexer config
 into the apps so they don't each configure indexers by hand.
 
-- [ ] **App sync — Sonarr, Radarr, qui** — push indexer config into these three via their API: the sync
+- [x] **App sync — Sonarr, Radarr, qui** — push indexer config into these three via their API: the sync
       contract + add/update/remove lifecycle + per-app enable/disable (its own sub-plan; a Prowlarr
       headline feature). Scoped to **Sonarr/Radarr/qui only** — other \*arrs (Lidarr/Readarr/Mylar/Whisparr)
       are demand-gated backlog.
@@ -349,10 +385,13 @@ into the apps so they don't each configure indexers by hand.
       connectivity 400 only because no harbrr feed is deployed at that host to authenticate the probe
       key; the Sonarr error echoed `apikey=…` in a URL, confirming the never-echo-app-bodies fix.) No
       driver changes were needed. The doc-derived goldens are confirmed.
-      — **Remaining for the box:** a fully-green Sonarr/Radarr indexer *save* needs harbrr actually
-      deployed in the stack (a valid minted feed key + reachable feed). `[Tracked: contracts
-      live-validated; full-stack save pending harbrr deployment]`
-- [ ] **Gate — a legitimate Swagger-only Prowlarr replacement.** With Phase 10 done, harbrr fully replaces
+      — **Gold-standard live test passed 2026-06-19** (harbrr deployed at `192.168.10.220:7575`, driven
+      entirely over the API): 10 real apikey indexers added + tested green in harbrr, then 3
+      app-connections (Sonarr/Radarr/qui) created and synced. **Radarr 10/10 created, qui 10/10 created,
+      Sonarr 8/10** — the 2 misses (`reelflix`, `retromoviesclub`) are movie-only defs (no `tv-search`)
+      that Sonarr *correctly* rejects and that landed in Radarr fine, so the full-stack save is confirmed
+      green. Indexers + connections left persisted. `[Resolved: Phase 10]`
+- [x] **Gate — a legitimate Swagger-only Prowlarr replacement.** With Phase 10 done, harbrr fully replaces
       this stack's Prowlarr **operated entirely through the Swagger API** at `/api/docs` — no Web UI: add +
       configure + test every indexer, search, grab through `/dl`, and sync indexers into Sonarr/Radarr/qui,
       all over HTTP. **This is the alpha's definition of done.** Phase 11 (Web UI) is additive — nicer to
@@ -375,6 +414,16 @@ into the apps so they don't each configure indexers by hand.
 Built when a real user needs it, not on a schedule. Each is self-contained and off the alpha→beta
 (Phase 10 app-sync → Phase 11 Web UI) critical path.
 
+- **Live retest of the two no-tracker auth patterns** (moved from Phase 9's "every auth/fetch pattern
+  live", which is otherwise green). Both are **offline-proven**; they need a qualifying tracker/proxy in
+  the operator's stack to confirm live:
+  - **cookie / manual-cookie** (`ManualCookieSolver`) — none of the stack's Cardigann trackers use cookie
+    login (IPTorrents/MyAnonamouse are native cookie drivers, already resolved). Test by configuring any
+    Cardigann tracker with `solver_type=manual_cookie` + a browser-exported cookie (e.g. a temporary
+    HD-Space flip), or a real `method: cookie` tracker if one is added.
+  - **per-indexer proxy (HTTP/SOCKS5)** — no HTTP/SOCKS proxy in the stack (only FlareSolverr). Test by
+    standing up a local proxy (microsocks/tinyproxy) and routing any search via `proxy_type`+`proxy_url`;
+    the doer/transport plumbing is offline-tested. SOCKS4 unsupported (`x/net/proxy` has no socks4 dialer).
 - **More \*arr sync targets** — Lidarr / Readarr / Mylar / Whisparr. The Phase-10 sync contract is built
   for Sonarr/Radarr/qui; extending it to another app is mostly a per-app adapter.
 - **Jackett/Prowlarr migration import** — import indexer instances + credentials + category overrides.
@@ -386,6 +435,10 @@ Built when a real user needs it, not on a schedule. Each is self-contained and o
   one **Gazelle-API** base driver (Redacted/Orpheus/PTP/BTN/AnimeBytes); cookie-scrape (TorrentDay/SpeedCD)
   and passkey (HDBits/BeyondHD) reuse the IPTorrents/FileList shapes. Build per tracker on demand.
 - **harbrr → autobrr push** — closes the RSS-polling gap (family-only win).
+- **Usenet / Newznab support** — harbrr is torrent-only today, so a stack's usenet indexers (e.g.
+  DOGnzb) can't migrate. Add Newznab provider support (the `caps`/`search` surface already speaks
+  Newznab-compatible XML; the gap is the usenet *fetch* + indexer kind). Surfaced by the Phase 10
+  gold-standard migration — DOGnzb was the one stack indexer harbrr couldn't serve.
 - **cross-seed search backend.**
 - **Stats / search history** (query/grab/auth event log + query API; the auth log populates
   `api_keys.last_used_at`, left unwritten in Phase 4) **+ notifications** (Discord/webhook, pluggable).

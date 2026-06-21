@@ -117,11 +117,41 @@ func (e *Executor) postForm(ctx context.Context, def *loader.Definition, target 
 		return err
 	}
 	headers := mergeFormHeaders(def.Login.Headers)
-	body, status, err := e.do(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(pairs.Encode()), headers)
+	encoded := pairs.Encode()
+	body, status, err := e.do(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(encoded), headers)
 	if err != nil {
 		return err
 	}
+	// When the POST is blocked by an anti-bot challenge (e.g. Cloudflare gating the
+	// login endpoint), harbrr cannot clear it during the POST itself — a solver
+	// cannot complete a JS challenge mid-submission. But a GET of the SAME login URL
+	// IS challenged and yields a host-wide cf_clearance, so solve that, then retry
+	// the POST carrying the clearance cookie + the bound User-Agent.
+	if detectAntiBot(body) != nil {
+		return e.solveAndRetryLoginPost(ctx, def.Login, rawURL, encoded, headers)
+	}
 	return e.checkErrors(def.Login, rawURL, body, status)
+}
+
+// solveAndRetryLoginPost clears an anti-bot challenge on a login POST by GET-solving
+// the (challenged) login URL — which issues a host-wide cf_clearance + bound UA that
+// do() then replays — and retrying the POST. It fails loud with ErrSolverRequired
+// when no solver is configured (or the solve declines) and when the retried POST is
+// still challenged, mirroring fetchLandingPastAntiBot. Credentials are never echoed.
+func (e *Executor) solveAndRetryLoginPost(ctx context.Context, l *loader.Login, rawURL, postData string, headers map[string][]string) error {
+	if err := e.SolveHost(ctx, rawURL); err != nil {
+		// Keep the concrete cause (no solver configured vs a redacted solver outage)
+		// so an incident can be triaged; SolveHost's errors carry no secret.
+		return fmt.Errorf("%w: the login POST is guarded by an anti-bot challenge: %w", ErrSolverRequired, err)
+	}
+	body, status, err := e.do(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(postData), headers)
+	if err != nil {
+		return err
+	}
+	if detectAntiBot(body) != nil {
+		return fmt.Errorf("%w: the login POST is still challenged after solving", ErrSolverRequired)
+	}
+	return e.checkErrors(l, rawURL, body, status)
 }
 
 // renderInputs template-renders each Login.Inputs value into url.Values. Keys
