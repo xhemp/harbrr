@@ -104,25 +104,27 @@ search/grab are the **live-validation** gate.
   a URL. `user_agent` is a plain `text` field (not secret-classified) sent as the
   `User-Agent` header. `redaction`-focused tests assert the synthetic cookie/UA values
   never appear in any recorded request URL or any error string.
-- **Download-URL path-key redaction** — `[Tracked]`. As with AvistaZ, the URL
-  redactor is query-scoped, so the driver keeps the download URL out of every error it
-  raises (`sanitizeGrabError`), and the `/dl` proxy keeps the raw download URL out of the
-  served feed. IPT download URLs (`/download.php/{id}/{name}.torrent`) are authenticated by
-  the session cookie, not a path key, so there is no path secret to leak in practice;
-  confirm in the live grab.
+- **Download-URL path-key redaction** — `[Accepted]`. The URL redactor is
+  query-scoped, so the driver keeps the download URL out of every error it raises
+  (`sanitizeGrabError`), and the `/dl` proxy keeps the raw download URL out of the served
+  feed. IPT download URLs (`/download.php/{id}/{name}.torrent`) are authenticated by the
+  session cookie, not a path key, so there is no path secret to leak in the first place.
+  The query-scoped redactor is sufficient here; no path-aware redaction planned.
 
 ## RequestDelay
 
-`2.1s`. Prowlarr's `IPTorrents` indexer does not override the framework rate limit, so the
-default `2.1s` applies; it rides on the definition's `RequestDelay` and is enforced by the
-registry's existing paced client (no special-casing). `[Tracked]` — confirm
-against the live Prowlarr if it ever sets an explicit limit.
+`2.1s`. `[Resolved]` — confirmed against Prowlarr source (`IPTorrents.cs`, 2026-06-21):
+its IPTorrents indexer sets **no** rate-limit override, and the framework default is
+`RateLimit => TimeSpan.FromSeconds(2)` (2.0s, `HttpIndexerBase`). harbrr applies a
+marginally more conservative `2.1s`, riding on the definition's `RequestDelay` and
+enforced by the registry's existing paced client (no special-casing). Pacing does not
+affect results, so the 0.1s gap is not a parity concern.
 
-## Deferred to live validation
+## Live validation
 
-- **Live search/grab + the Prowlarr differential** — `[Tracked]`. The entire
-  offline gate is synthetic; request/response/category parity against a live IPTorrents +
-  live Prowlarr, and a real `.torrent` grab through `/dl`, are the live acceptance gate.
-- **Live column layout** — `[Tracked]`. The header-text column names
-  (`Sort by size`, etc.) are taken from the Prowlarr source; confirm the exact live header
-  strings (and the 10-vs-6 cell offset) in the differential.
+- **Live search/grab + the Prowlarr differential** — `[Resolved]` (live run
+  2026-06-18, `internal/smoke/README.md`): 50=50 vs the live Prowlarr, title Jaccard
+  1.00, and a real `.torrent` grabbed through `/dl`.
+- **Live column layout** — `[Resolved]` (same run). The 50=50 / Jaccard 1.00
+  differential exercised the real header strings and the 10-vs-6 cell offset end to end,
+  so the header-text column resolution holds against the live response.

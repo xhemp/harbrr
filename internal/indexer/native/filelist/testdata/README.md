@@ -74,17 +74,24 @@ the **live-validation** gate.
   unparseable `upload_date` is a parse error for the whole response, matching Prowlarr's
   throw-on-bad-row.
 
-## Deferred to live validation
+## Live validation
 
-- **Live search/grab + the Prowlarr differential** — `[Tracked]`. The entire
-  offline gate is synthetic; request/response/category parity against a live FileList +
-  live Prowlarr, and a real `.torrent` grab through `/dl`, are the live acceptance
-  gate.
-- **`upload_date` shape** — `[Tracked]`. `parsePublishDate` assumes the exact
-  `yyyy-MM-dd HH:mm:ss` form Prowlarr appends `+0300` to. If the live API ever emits a
-  different shape, the bad-date path fails the whole search (see "bad-row handling");
-  confirm the real format in the live differential.
-- **Download-URL passkey redaction** — `[Tracked]`. The download URL carries the
-  passkey in its query. harbrr keeps that URL out of every error it raises and routes the
-  fetch only through `/dl` (which keeps the raw URL out of the served feed). Confirm the
-  live download flow keeps the passkey out of all logs/traces.
+- **Live search** — `[Resolved]` (live run 2026-06-18, `internal/smoke/README.md`):
+  a live FileList search succeeded after the int-flags fix (#46; it was an HTTP 500
+  before).
+- **Live grab** — `[Resolved]` (live 2026-06-21, through a running harbrr container):
+  a live FileList search parsed cleanly and the first result's `/dl` link resolved to a
+  real bencoded `.torrent` (`application/x-bittorrent`).
+- **Prowlarr differential** — `[Resolved]` (live 2026-06-21). Run against the live
+  Prowlarr FileList indexer — named **"FileList.io"**, the name mismatch that made the
+  smoke harness auto-skip it: q=`dune` returned **87 on both** harbrr and Prowlarr, title
+  Jaccard **1.00**.
+- **`upload_date` shape** — `[Resolved]` (live 2026-06-21). The live API emitted the
+  expected `yyyy-MM-dd HH:mm:ss` form; `parsePublishDate` parsed every row without a
+  bad-date failure (e.g. `2022-01-10T11:59:06Z` normalized). Widen the parser only if a
+  future live response shows a shape it misses.
+- **Download-URL passkey redaction** — `[Accepted]`. The download URL carries the
+  passkey in its **query**, which is exactly `RedactURL`'s scope, so any log/error that
+  did include the URL would be scrubbed. On top of that, the driver keeps the URL out of
+  every error it raises and routes the fetch only through `/dl` (which keeps the raw URL
+  out of the served feed). Covered; no further work planned.

@@ -7,6 +7,12 @@ that exercise it**. This file is the *index* of where those records live and the
 single rule they all follow; it is **not** a second copy of them, so there is no
 parallel ledger to drift.
 
+**Scope:** this ledger is only for *behavioral* differences from Jackett on the same
+input. **Unbuilt product features** (OIDC, backup/restore, stats/event-log,
+user-configurable rate, fleet-status, …) are not divergences — they live in
+`docs/plan.md` → "Beyond the alpha" (the demand-gated backlog), never as `[Tracked]`
+entries here.
+
 ## Disposition vocabulary
 
 Every divergence entry carries exactly one disposition, so the record is a
@@ -70,13 +76,12 @@ The actionable divergences are exactly the `[Tracked]` entries across the
 per-layer READMEs (the remainder of a `[Partial]` entry is one too). To list them:
 
 ```sh
+# Every divergence record is a per-layer testdata README, plus the live-smoke
+# README — globbed so a newly added layer (e.g. another native tracker) is
+# covered automatically, with no path list here to drift.
 grep -rn '\[Tracked' \
-  internal/indexer/cardigann/parity/testdata/README.md \
-  internal/torznab/testdata/README.md \
-  internal/secrets/testdata/README.md \
-  internal/indexer/registry/testdata/README.md \
-  internal/indexer/native/avistaz/testdata/README.md \
-  internal/smoke/README.md
+  internal/smoke/README.md \
+  $(find internal -path '*/testdata/README.md' | sort)
 ```
 
 When a tracked gap ships, update its entry in its own README — it is recorded in
