@@ -50,3 +50,8 @@ This is **demand-gated** — none of it is required for any current stack; it's 
 build in when a user adds one of these trackers. A request for a *specific* tracker is built
 directly even though it carries no family bonus — as **BroadcastTheNet** was (#62, the first
 tier-4 one-off shipped on demand).
+
+**BTN live-validation (2026-06-24):** test → `{ok:true}`; the Prowlarr differential (harbrr vs
+Prowlarr indexer 32, `q=severance`) matched **35/35 count parity, title Jaccard 0.944**; and a
+`/dl` grab resolved a real 13 KB `.torrent` (valid bencode, BTN announce) with the passkey sealed
+out of the served feed link. Confirmed end-to-end against the live tracker through the container.
