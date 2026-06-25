@@ -22,11 +22,18 @@ import (
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 	"github.com/autobrr/harbrr/internal/indexer/native"
+	"github.com/autobrr/harbrr/internal/indexer/native/animebytes"
 	"github.com/autobrr/harbrr/internal/indexer/native/avistaz"
+	"github.com/autobrr/harbrr/internal/indexer/native/beyondhd"
 	"github.com/autobrr/harbrr/internal/indexer/native/broadcastthenet"
 	"github.com/autobrr/harbrr/internal/indexer/native/filelist"
+	"github.com/autobrr/harbrr/internal/indexer/native/gazelle"
+	"github.com/autobrr/harbrr/internal/indexer/native/gazellegames"
+	"github.com/autobrr/harbrr/internal/indexer/native/hdbits"
 	"github.com/autobrr/harbrr/internal/indexer/native/iptorrents"
 	"github.com/autobrr/harbrr/internal/indexer/native/myanonamouse"
+	"github.com/autobrr/harbrr/internal/indexer/native/passthepopcorn"
+	"github.com/autobrr/harbrr/internal/indexer/native/torrentday"
 	"github.com/autobrr/harbrr/internal/web/torznab"
 )
 
@@ -313,11 +320,18 @@ func (r *Registry) NativeDefinitions() []*loader.Definition {
 func nativeFamilies() map[string]native.Family {
 	m := make(map[string]native.Family)
 	for _, fams := range [][]native.Family{
+		animebytes.Families(),
 		avistaz.Families(),
+		beyondhd.Families(),
 		broadcastthenet.Families(),
 		filelist.Families(),
 		myanonamouse.Families(),
 		iptorrents.Families(),
+		gazelle.Families(),
+		gazellegames.Families(),
+		hdbits.Families(),
+		passthepopcorn.Families(),
+		torrentday.Families(),
 	} {
 		for _, f := range fams {
 			m[f.Definition.ID] = f
