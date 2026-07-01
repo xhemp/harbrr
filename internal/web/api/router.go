@@ -16,6 +16,7 @@ import (
 	"github.com/autobrr/harbrr/internal/auth"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/registry"
+	"github.com/autobrr/harbrr/internal/notify"
 	"github.com/autobrr/harbrr/internal/secrets"
 	"github.com/autobrr/harbrr/internal/version"
 )
@@ -27,6 +28,7 @@ type Deps struct {
 	Loader   *loader.Loader
 	AppSync  *appsync.Service
 	Announce *announce.Service
+	Notify   *notify.Service
 	Sessions *scs.SessionManager
 	// DLToken seals a resolver-needing indexer's download link behind the /dl proxy
 	// for the JSON search response, exactly as the Torznab feed does, so a passkey
@@ -64,6 +66,7 @@ type router struct {
 	loader   *loader.Loader
 	appsync  *appsync.Service
 	announce *announce.Service
+	notify   *notify.Service
 	sessions *scs.SessionManager
 	dlToken  *secrets.Keyring
 	basePath string
@@ -97,7 +100,7 @@ func NewRouter(deps Deps, cfg Config) (http.Handler, error) {
 
 	rt := &router{
 		auth: deps.Auth, registry: deps.Registry, loader: deps.Loader, appsync: deps.AppSync,
-		announce: deps.Announce, sessions: deps.Sessions, dlToken: deps.DLToken, basePath: deps.BasePath,
+		announce: deps.Announce, notify: deps.Notify, sessions: deps.Sessions, dlToken: deps.DLToken, basePath: deps.BasePath,
 		cache: deps.Cache, cfg: cfg, log: deps.Logger, logLevel: deps.LogLevel,
 		allowlist: allow, trustedProxies: proxies,
 	}
@@ -136,6 +139,10 @@ func (rt *router) routes() http.Handler {
 
 			r.Get("/api/indexers", rt.listIndexers)
 			r.Post("/api/indexers", rt.addIndexer)
+			// The static "stats" segment is registered so chi prioritizes it over the
+			// {slug} param at the same level: GET /api/indexers/stats resolves to
+			// allIndexerStats, not getIndexer.
+			r.Get("/api/indexers/stats", rt.allIndexerStats)
 			r.Get("/api/indexers/{slug}", rt.getIndexer)
 			r.Patch("/api/indexers/{slug}", rt.updateIndexer)
 			r.Delete("/api/indexers/{slug}", rt.deleteIndexer)
@@ -143,12 +150,14 @@ func (rt *router) routes() http.Handler {
 			r.Post("/api/indexers/{slug}/disable", rt.disableIndexer)
 			r.Post("/api/indexers/{slug}/test", rt.testIndexer)
 			r.Get("/api/indexers/{slug}/status", rt.indexerStatus)
+			r.Get("/api/indexers/{slug}/stats", rt.indexerStats)
 			r.Get("/api/indexers/{slug}/search", rt.searchIndexer)
 			r.Get("/api/indexers/{slug}/capabilities", rt.indexerCapabilities)
 			r.Get("/api/indexers/{slug}/crossseed-snippet", rt.crossSeedSnippet)
 
 			r.Get("/api/app-connections", rt.listConnections)
 			r.Post("/api/app-connections", rt.createConnection)
+			r.Post("/api/app-connections/sync", rt.syncAllConnections)
 			r.Get("/api/app-connections/{id}", rt.getConnection)
 			r.Patch("/api/app-connections/{id}", rt.updateConnection)
 			r.Delete("/api/app-connections/{id}", rt.deleteConnection)
@@ -165,6 +174,15 @@ func (rt *router) routes() http.Handler {
 			r.Delete("/api/announce-connections/{id}", rt.deleteAnnounceConnection)
 			r.Post("/api/announce-connections/{id}/enable", rt.enableAnnounceConnection)
 			r.Post("/api/announce-connections/{id}/disable", rt.disableAnnounceConnection)
+
+			r.Get("/api/notifications", rt.listNotifications)
+			r.Post("/api/notifications", rt.createNotification)
+			r.Get("/api/notifications/{id}", rt.getNotification)
+			r.Patch("/api/notifications/{id}", rt.updateNotification)
+			r.Delete("/api/notifications/{id}", rt.deleteNotification)
+			r.Post("/api/notifications/{id}/enable", rt.enableNotification)
+			r.Post("/api/notifications/{id}/disable", rt.disableNotification)
+			r.Post("/api/notifications/{id}/test", rt.testNotification)
 
 			r.Get("/api/cache/stats", rt.cacheStats)
 			r.Post("/api/cache/flush", rt.cacheFlush)

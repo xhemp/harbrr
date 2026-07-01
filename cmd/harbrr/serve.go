@@ -26,6 +26,7 @@ import (
 	"github.com/autobrr/harbrr/internal/indexer/definitions"
 	"github.com/autobrr/harbrr/internal/indexer/registry"
 	"github.com/autobrr/harbrr/internal/logger"
+	"github.com/autobrr/harbrr/internal/notify"
 	"github.com/autobrr/harbrr/internal/secrets"
 	"github.com/autobrr/harbrr/internal/server"
 	"github.com/autobrr/harbrr/internal/version"
@@ -98,8 +99,14 @@ func serve(ctx context.Context, cfg *config.Config, log zerolog.Logger) error {
 	authSvc := auth.NewService(db)
 
 	searchCache := buildSearchCache(ctx, db, cfg, log)
-	regOpts := []registry.Option{registry.WithLogger(log), registry.WithSearchCache(searchCache)}
-	reg := registry.New(db, loader.New(dropinDir(cfg)), keyring, regOpts...)
+	// notifySvc is the registry's health sink: a recorded indexer failure fans out
+	// (async, best-effort) to configured targets. Built here so it is an option at New.
+	notifySvc := notify.NewService(db, keyring, appSyncClient(), log)
+	reg := registry.New(db, loader.New(dropinDir(cfg)), keyring,
+		registry.WithLogger(log), registry.WithSearchCache(searchCache), registry.WithHealthSink(notifySvc))
+	if err := reg.RehydrateStats(ctx); err != nil {
+		log.Warn().Err(err).Msg("loading indexer stat counters failed; counters start at zero this session")
+	}
 	appSync := appsync.NewService(db, registrySource{reg: reg}, authSvc, keyring, appSyncClient(), log)
 	announceSvc := announce.NewService(db, authSvc, keyring,
 		announce.DefaultTargetFactory(appSyncClient(), nil, nil), log)
@@ -119,7 +126,7 @@ func serve(ctx context.Context, cfg *config.Config, log zerolog.Logger) error {
 
 	mgmt, err := api.NewRouter(api.Deps{
 		Auth: authSvc, Registry: reg, Loader: loader.New(dropinDir(cfg)), AppSync: appSync,
-		Announce: announceSvc, Sessions: sessions,
+		Announce: announceSvc, Notify: notifySvc, Sessions: sessions,
 		DLToken: keyring, BasePath: cfg.Server.BaseURL, Cache: searchCache, Logger: log,
 		LogLevel: logLevel,
 	}, api.Config{
@@ -150,10 +157,12 @@ func serve(ctx context.Context, cfg *config.Config, log zerolog.Logger) error {
 	defer func() {
 		bgCancel()
 		bg.Wait()
+		drainNotify(ctx, notifySvc) // join in-flight dispatches before the deferred db.Close
 	}()
 
 	startSessionCleanup(bgCtx, &bg, store, log)
 	startSearchCacheCleanup(bgCtx, &bg, searchCache, log)
+	startIndexerStatsFlush(bgCtx, &bg, reg)
 
 	// Confirm the port is actually bindable before logging "listening": srv.Run binds
 	// asynchronously, so a fatal listen error (e.g. address in use) would otherwise
@@ -285,6 +294,14 @@ func listenAddr(cfg *config.Config) string {
 	return net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 }
 
+// drainNotify joins in-flight notification dispatch goroutines (which read the DB)
+// before the deferred db.Close runs, bounded so a hanging webhook can't stall shutdown.
+func drainNotify(ctx context.Context, svc *notify.Service) {
+	drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	svc.Drain(drainCtx)
+}
+
 // startSessionCleanup reaps expired sessions hourly until ctx is cancelled. It joins
 // wg so serve() can wait for an in-flight reap to finish before closing the DB.
 func startSessionCleanup(ctx context.Context, wg *sync.WaitGroup, store *database.SessionStore, log zerolog.Logger) {
@@ -361,6 +378,36 @@ func startSearchCacheCleanup(ctx context.Context, wg *sync.WaitGroup, sc *regist
 					log.Warn().Err(err).Msg("search cache cleanup failed")
 				}
 				t.Reset(cleanupTickInterval(sc)) // pick up any runtime interval change
+			}
+		}
+	}()
+}
+
+// indexerStatsFlushInterval is how often the per-indexer stat counters are flushed to
+// the DB. A fixed 60s tick is fine: the counters are observability-only, so losing the
+// increments since the last tick on a hard crash is acceptable (same tolerance the
+// cache counters accept).
+const indexerStatsFlushInterval = 60 * time.Second
+
+// startIndexerStatsFlush periodically flushes the registry's durable per-indexer stat
+// counters until ctx is cancelled, mirroring startSearchCacheCleanup. On ctx.Done() it
+// runs a final flush with a fresh bounded context so the shutdown counters commit before
+// the deferred db.Close() (bg.Wait() joins this goroutine first).
+func startIndexerStatsFlush(ctx context.Context, wg *sync.WaitGroup, reg *registry.Registry) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t := time.NewTicker(indexerStatsFlushInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				reg.FlushStats(fctx)
+				cancel()
+				return
+			case <-t.C:
+				reg.FlushStats(ctx)
 			}
 		}
 	}()
