@@ -35,13 +35,14 @@ The behaviours below are pinned by tests in `internal/secrets`, `internal/auth`,
   classifier (`loader.SettingsField.IsSecret`) reflects this; the corpus audit
   (`internal/indexer/cardigann/loader/testdata/secret_audit.txt`) pins the full
   classification. `[Deliberate]`
-- **No CSRF token (qui model).** §9 names "CSRF on cookie-authenticated mutating
-  endpoints." harbrr satisfies this the way qui/autobrr do — `SameSite=Lax`
-  `HttpOnly` session cookies, `RenewToken` on login, and route separation (the
-  cookie-authed surface is the JSON management API; programmatic clients use the
-  `X-API-Key` header; Torznab uses `?apikey`) — rather than a synchronizer token.
-  Verified by `TestSetupLoginLogoutFlow` (cookie flags) +
-  `TestAuthDisabledIgnoresUntrustedXFF`. `[Deliberate]`
+- **Session-bound CSRF token.** The security model (`docs/security.md`) requires "CSRF on
+  cookie-authenticated mutating endpoints." harbrr now enforces a **synchronizer token**
+  (`internal/web/api/csrf.go`): cookie-auth `POST`/`PUT`/`PATCH`/`DELETE` requests must echo the
+  session's token in `X-CSRF-Token` (minted at login, handed to the client via the non-HttpOnly
+  `harbrr_csrf` cookie + `GET /api/auth/me`); `X-API-Key`/auth-disabled callers are exempt;
+  `SameSite=Lax` remains as defense in depth. A synchronizer token (not an Origin/Referer check)
+  was chosen so it stays correct behind a reverse proxy and under a future OIDC login. Verified by
+  `TestCSRF` (+ `TestSetupLoginLogoutFlow` cookie flags). `[Resolved]`
 - **Single connection, not qui's dual pool.** The SQLite store uses one
   `*sql.DB` with `SetMaxOpenConns(1)`, fully serializing access (no `SQLITE_BUSY`
   / nested-tx) — simplest correct choice for a single-user daemon. qui's

@@ -50,6 +50,12 @@ func (rt *router) login(w http.ResponseWriter, r *http.Request) {
 	}
 	rt.sessions.Put(r.Context(), sessionAuthenticated, true)
 	rt.sessions.Put(r.Context(), sessionUsername, u.Username)
+	// Bind a CSRF token to the new session and hand it to the client (companion
+	// cookie). A future OIDC callback must do the same after RenewToken.
+	if err := rt.issueCSRFToken(r.Context(), w); err != nil {
+		rt.writeServiceError(w, "login session", err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -87,6 +93,7 @@ func (rt *router) logout(w http.ResponseWriter, r *http.Request) {
 		rt.writeServiceError(w, "logout", err)
 		return
 	}
+	rt.clearCSRFCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -96,9 +103,13 @@ func (rt *router) me(w http.ResponseWriter, r *http.Request) {
 	if username == "" {
 		username = "admin" // API-key or auth-disabled mode has no session username
 	}
+	// csrfToken is the session's current token (empty for an apikey/auth-disabled
+	// caller, which needs no CSRF token) so a browser client can bootstrap it here as
+	// well as from the companion cookie.
 	writeJSON(w, http.StatusOK, map[string]string{
 		"username":   username,
 		"authMethod": methodName(authMethodFrom(r.Context())),
+		"csrfToken":  rt.sessions.GetString(r.Context(), sessionCSRFToken),
 	})
 }
 

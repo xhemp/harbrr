@@ -371,6 +371,16 @@ func mustJSON(t *testing.T, c *stdhttp.Client, method, url string, payload any, 
 	if err != nil {
 		t.Fatalf("new request %s: %v", url, err)
 	}
+	// Echo the CSRF token from the (non-HttpOnly) companion cookie on mutating
+	// requests, mirroring a browser client (see internal/web/api/csrf.go). Before
+	// login the jar has no such cookie, so login itself is unaffected.
+	if c.Jar != nil && method != stdhttp.MethodGet && method != stdhttp.MethodHead {
+		for _, ck := range c.Jar.Cookies(req.URL) {
+			if ck.Name == "harbrr_csrf" {
+				req.Header.Set("X-CSRF-Token", ck.Value)
+			}
+		}
+	}
 	resp, err := c.Do(req)
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, url, err)

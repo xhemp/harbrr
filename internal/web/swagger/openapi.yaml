@@ -13,9 +13,12 @@ info:
 
     Authentication: the management API uses a cookie session (after login) or the
     X-API-Key header; the Torznab feed authenticates with an apikey (or passkey)
-    query parameter, as *arr clients expect. CSRF defence follows the autobrr
-    family — SameSite=Lax session cookies plus header-authenticated programmatic
-    access — so there is no separate CSRF token (see docs/divergences.md).
+    query parameter, as *arr clients expect. CSRF: a cookie-authenticated mutating
+    request (POST/PUT/PATCH/DELETE) must echo the session's CSRF token in an
+    X-CSRF-Token header — the token is minted at login and handed to the client via
+    the non-HttpOnly harbrr_csrf cookie and GET /api/auth/me; a missing or wrong
+    token is 403. X-API-Key and auth-disabled callers are exempt (see
+    docs/security.md).
   license:
     name: GPL-2.0-or-later
     url: https://www.gnu.org/licenses/gpl-2.0.html
@@ -152,6 +155,12 @@ paths:
                 properties:
                   username: { type: string }
                   authMethod: { type: string }
+                  csrfToken:
+                    type: string
+                    description: >
+                      The session's CSRF token (empty for an apikey/auth-disabled
+                      caller). Echo it in the X-CSRF-Token header on cookie-authenticated
+                      mutating requests.
                 required: [username, authMethod]
         "401": { $ref: "#/components/responses/Unauthorized" }
 

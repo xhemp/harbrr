@@ -49,8 +49,24 @@ linters:
     - forcetypeassert
     - nilnil
     - wrapcheck
+    # --- harbrr: resource-leak & correctness (pre-alpha hardening) ---
+    - bodyclose          # every HTTP response body is closed (harbrr is HTTP-heavy)
+    - sqlclosecheck      # sql.Rows/Stmt are closed
+    - bidichk            # trojan-source / bidi-unicode in untrusted tracker data
+    - gocheckcompilerdirectives # validate //go:build / //go:embed (a typo silently disables)
+    - durationcheck      # catch time.Duration multiplication bugs (TTLs/backoff/rate limits)
+    - makezero           # no append to a slice made with a non-zero length
+    - interfacebloat     # guardrail against god-interfaces (see settings)
+    - wastedassign       # no assignment whose value is never read
+    - reassign           # no reassigning another package's exported vars
+    - predeclared        # no shadowing predeclared identifiers (e.g. a var named `comparable`)
 
   settings:
+    interfacebloat:
+      # Guardrail against future god-interfaces (default 10). AGENTS.md's "interfaces
+      # ≤5 methods" stays a review norm, not a hard gate — a couple of core seams
+      # (native.Driver, torznabhttp.Indexer) legitimately sit at 6.
+      max: 10
     exhaustive:
       default-signifies-exhaustive: false
     gosec:
@@ -83,6 +99,7 @@ linters:
           - gocyclo
           - forcetypeassert
           - wrapcheck
+          - bodyclose # short-lived test responses; leaks only matter in production code
       # Synthetic credentials live only in *_test.go (AGENTS.md "Security"), which
       # trips gosec's hardcoded-credentials check (G101). The same paths are
       # allowlisted for gitleaks/check-no-secrets; G101 stays fully active on

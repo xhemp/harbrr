@@ -19,8 +19,19 @@ The set is autobrr/qui's config (for family consistency) plus harbrr additions:
 - **Extra type safety (harbrr additions):** `forcetypeassert` (no unchecked `x.(T)`), `nilnil`,
   `wrapcheck`. Plus qui's `errorlint`/`errname`/`exhaustive`/`unconvert` and golangci's defaults
   (`errcheck`, `govet`, `staticcheck`, `unused`, `ineffassign`).
+- **Resource-leak & correctness (harbrr additions):** `bodyclose` (every HTTP response body is
+  closed — harbrr is HTTP-heavy), `sqlclosecheck` (`sql.Rows`/`Stmt` closed), `bidichk`
+  (trojan-source / bidi-unicode in untrusted tracker data), `gocheckcompilerdirectives` (a typo in a
+  `//go:build`/`//go:embed` directive silently disables it, and harbrr relies on both),
+  `durationcheck` (`time.Duration` math bugs), `makezero` (no `append` to a non-zero-length slice),
+  `interfacebloat` as a **god-interface guardrail at 10 methods** (the "interfaces ≤5" convention
+  above stays a review norm, since a couple of core seams legitimately sit at 6), and the footgun
+  guards `wastedassign`, `reassign`, `predeclared`.
 - **Family inheritance:** `gocritic`, `revive`, `gosec`, `perfsprint`, `prealloc`, `noctx`,
   `containedctx`, `fatcontext`, `copyloopvar`, `misspell`, `whitespace`, and others.
+
+Dependency CVEs are covered separately by **`govulncheck`** (`.github/workflows/security.yml`), which
+only flags vulnerabilities on call paths harbrr actually reaches.
 
 ## Handling a complexity finding
 
@@ -37,8 +48,9 @@ should be rare, and the comment must say why splitting would hurt readability.
 
 ## Tests
 
-Test files relax `funlen`/`gocognit`/`gocyclo`/`forcetypeassert`/`wrapcheck` (table-driven tests and
-helper assertions are legitimately long), and `gosec` **G101** (hardcoded-credentials) is disabled in
+Test files relax `funlen`/`gocognit`/`gocyclo`/`forcetypeassert`/`wrapcheck`/`bodyclose` (table-driven
+tests and helper assertions are legitimately long, and a short-lived test HTTP response leaking is
+harmless — `bodyclose` matters in production code), and `gosec` **G101** (hardcoded-credentials) is disabled in
 `*_test.go` only — synthetic fixture secrets live there (see AGENTS.md "Security"; the same paths are
 allowlisted for gitleaks/check-no-secrets), and G101 stays fully active on production code. Everything
 else still applies.

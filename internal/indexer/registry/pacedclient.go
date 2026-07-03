@@ -195,7 +195,8 @@ func (d *pacedDoer) issue(ctx context.Context, req *stdhttp.Request, lim *rate.L
 		return attemptResult{err: d.classifyWaitErr(ctx, err, lastRL)}
 	}
 	start := d.now()
-	resp, derr := d.base.Do(req) // inbound ctx + own client timeout; NOT budget-bounded
+	resp, derr := d.base.Do(req) //nolint:bodyclose // resp is returned to the caller (attemptResult.resp), which closes the body; the rate-limit path drainCloses it below
+
 	dur := d.now().Sub(start)
 	// Log only scheme://host, never the path/query: a native driver can hide its download
 	// secret in a PATH segment (beyond-hd's api_key/rsskey, animebytes' passkey) that

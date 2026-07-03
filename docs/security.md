@@ -79,9 +79,16 @@ hashed.** The web-UI password and API keys are never stored in recoverable form,
   `X-Forwarded-For` is honored only from configured `auth.trusted_proxies`, taking the rightmost
   non-proxy hop so a client cannot forge an allowlisted IP.
 
-**CSRF:** protection today is the session cookie's `SameSite=Lax` attribute (plus the `X-API-Key`
-path for programmatic mutations); there is **no token-based CSRF middleware**. Dedicated CSRF tokens
-and **OIDC** are qui features **not yet ported** — see "Not yet built".
+**CSRF** (`internal/web/api/csrf.go`). Cookie-authenticated **mutating** requests
+(`POST`/`PUT`/`PATCH`/`DELETE`) require a **session-bound token** echoed in an `X-CSRF-Token`
+header; a missing/mismatched token is `403`. This is a synchronizer token, not an
+Origin/Referer check, on purpose — it is **origin-agnostic** (transparent to a reverse proxy that
+rewrites `Host`/`Origin`) and **login-mechanism-agnostic** (a password login or a future OIDC
+callback both just create a session, and both issue the token via the same helper). The token is
+minted on login, stored in the session, and handed to the client in a **non-HttpOnly `harbrr_csrf`
+companion cookie** (the session cookie is HttpOnly, so it can't be read by JS) — also returned by
+`GET /api/auth/me`. Requests authenticated by `X-API-Key` or the auth-disabled/trusted-proxy mode
+carry no forgeable ambient credential and are **exempt**. `SameSite=Lax` remains as defense in depth.
 
 ## Redaction & diagnostics
 
@@ -110,7 +117,6 @@ and **OIDC** are qui features **not yet ported** — see "Not yet built".
 
 These were in the original design but are **not implemented**; don't document them as shipped:
 
-- **Token-based CSRF middleware** — today's protection is `SameSite=Lax` + `X-API-Key` (above).
 - **OIDC** login.
 - **Safe config/DB export/import** with a `<redacted>`-by-default dump and a separately
   **passphrase-encrypted** include-secrets opt-in. (Backup/restore is demand-gated — see `plan.md`

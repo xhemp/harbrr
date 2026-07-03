@@ -125,7 +125,7 @@ func (rt *router) routes() http.Handler {
 
 		// Authenticated routes (session or X-API-Key; auth-disabled mode allowed).
 		r.Group(func(r chi.Router) {
-			r.Use(rt.resolveAuth, rt.requireAuth)
+			r.Use(rt.resolveAuth, rt.requireAuth, rt.csrf)
 
 			r.Get("/api/auth/me", rt.me)
 			r.Post("/api/auth/logout", rt.logout)

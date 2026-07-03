@@ -19,6 +19,11 @@ import (
 
 // serve starts an httptest server for the env and returns a base URL + a
 // cookie-jar client (so a login cookie persists across requests).
+// isSafeTestMethod mirrors the server's read-only method set (see csrf.go).
+func isSafeTestMethod(m string) bool {
+	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
+}
+
 func serve(t *testing.T, e *env) (string, *http.Client) {
 	t.Helper()
 	srv := httptest.NewServer(e.handler)
@@ -45,6 +50,16 @@ func do(t *testing.T, c *http.Client, method, url string, body any, headers map[
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
+	}
+	// Mirror a browser client: echo the CSRF token from the (non-HttpOnly) companion
+	// cookie on mutating requests, unless the caller set the header explicitly (e.g. to
+	// test a bad token). Names mirror internal/web/api/csrf.go.
+	if c.Jar != nil && !isSafeTestMethod(method) && req.Header.Get("X-CSRF-Token") == "" {
+		for _, ck := range c.Jar.Cookies(req.URL) {
+			if ck.Name == "harbrr_csrf" {
+				req.Header.Set("X-CSRF-Token", ck.Value)
+			}
+		}
 	}
 	resp, err := c.Do(req)
 	if err != nil {

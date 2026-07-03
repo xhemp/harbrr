@@ -116,8 +116,8 @@ func newEnvWithCache(t *testing.T, cfg api.Config, buildCache func(db *database.
 	}
 	ldr := loader.New(dropin)
 
-	// Cookie hardening mirrors production (Box 5): the CSRF posture is SameSite=Lax
-	// + HttpOnly, no token (qui model).
+	// Cookie hardening mirrors production (Box 5): SameSite=Lax + HttpOnly, plus a
+	// session-bound CSRF token on cookie-auth mutating endpoints (see csrf.go).
 	sm := scs.New()
 	sm.Store = database.NewSessionStore(db)
 	sm.Cookie.Name = "harbrr_session"
