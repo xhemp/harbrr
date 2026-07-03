@@ -2,307 +2,159 @@
 
 > The tracker and indexer fabric for the autobrr ecosystem.
 
-Harbrr is a modern tracker and indexer management platform built for autobrr, qui, cross-seed, and private tracker power users.
+Harbrr is a single-binary, Cardigann-compatible **Torznab/Newznab** provider — the
+centralized intelligence layer between your trackers and your automation. Configure your
+trackers once, connect everything, and let harbrr aggregate feeds, deduplicate searches, and
+be a better private-tracker citizen.
 
-Manage your trackers once. Connect everything. Search less. Cache more.
+Built for **autobrr, qui, and cross-seed** from day one, while staying fully compatible with
+Sonarr, Radarr, Lidarr, Readarr, Mylar, Whisparr, and any Torznab client.
 
-Harbrr provides a centralized intelligence layer between your trackers and automation applications, reducing duplicate requests, aggregating RSS feeds, optimizing search traffic, and exposing a unified Torznab interface to your entire automation stack.
+> [!NOTE]
+> **Alpha — operated via the API.** The Cardigann engine is at parity with Jackett/Prowlarr
+> (proven offline and live), native drivers cover the trackers Cardigann can't express, and
+> harbrr syncs indexers into Sonarr/Radarr/qui. harbrr already works as a **Swagger-only
+> Prowlarr replacement**; a web UI is the next phase. Until then, the interactive **Swagger
+> UI at `/api/docs`** is the interface.
 
-While Harbrr is built with the autobrr ecosystem in mind, it remains fully compatible with Sonarr, Radarr, Lidarr, Readarr, Mylar, Whisparr, and any Torznab-compatible application.
+---
+
+## Quick start
+
+harbrr listens on port **7478** and stores its SQLite database + encryption keyfile in a
+single data directory. Both quick starts land you at the Swagger UI — from there, follow
+**[Getting started](website/docs/getting-started.md)** to create the admin, mint a Torznab
+key, add an indexer, and point your apps at the feed.
+
+### Docker
+
+```yaml
+# docker-compose.yml — a ready-to-edit docker-compose.example.yml ships in the repo
+services:
+  harbrr:
+    image: ghcr.io/autobrr/harbrr:latest
+    container_name: harbrr
+    restart: unless-stopped
+    ports:
+      - "7478:7478"
+    volumes:
+      - harbrr-config:/config      # SQLite db + encryption keyfile — BACK THIS UP
+    environment:
+      - TZ=Etc/UTC                 # match your stack so localized tracker dates parse
+
+volumes:
+  harbrr-config:
+```
+
+```bash
+docker compose up -d
+# open http://<host>:7478/api/docs
+```
+
+The image runs non-root, exposes port 7478, ships a `/healthz` check, and already invokes
+`harbrr serve --host 0.0.0.0 --data-dir /config`.
+
+> [!NOTE]
+> No stable image tag is published yet — `main` pushes don't publish images. Tag a release
+> (`git tag v0.1.0-alpha && git push origin v0.1.0-alpha`) to publish
+> `ghcr.io/autobrr/harbrr:0.1.0-alpha`, use a same-repo `pr-<n>` image, or build from source.
+
+### Linux (binary / source)
+
+Grab a prebuilt binary from [Releases](https://github.com/autobrr/harbrr/releases) once a
+`v*` tag is cut, or build from a checkout (Go 1.26+):
+
+```bash
+git clone https://github.com/autobrr/harbrr && cd harbrr
+make build                                   # -> bin/harbrr
+./bin/harbrr serve --data-dir ./data         # open http://localhost:7478/api/docs
+```
+
+---
+
+## The API & Swagger UI
+
+Everything harbrr does is an HTTP endpoint, and the **Swagger UI at `/api/docs`** is the full
+interactive interface for the alpha — create the admin, mint API keys, add/test indexers,
+search, grab, and configure app-sync, all from the browser. See
+**[The API & Swagger UI](website/docs/api.md)** for the reference.
+
+<!-- TODO(#12): embed Swagger UI screenshots once a release image is running. -->
 
 ---
 
 ## Why Harbrr?
 
-Most indexer managers were designed around the *arr ecosystem and later integrated with autobrr.
+Private trackers are a **shared resource**, but most automation stacks hammer them with
+duplicate RSS polls and repeated searches from disconnected apps. Instead of every app
+talking to every tracker, harbrr sits in the middle and aggregates, caches, and optimizes
+that traffic.
 
-Harbrr takes the opposite approach.
+- **Centralized tracker management** — one source of truth for auth, capabilities, categories,
+  and search behavior across your whole stack. No duplicating tracker setup per app.
+- **Shared RSS + search-results cache** — many consumers, one upstream request; far fewer
+  tracker queries, lower latency, better tracker citizenship.
+- **Cross-seed aware** — smarter release matching, freeleech-aware matching, and optional
+  freeleech-bypass logic.
+- **Cardigann compatibility** — reuses the mature Jackett/Prowlarr definition ecosystem with a
+  modernized execution engine.
+- **Full Torznab/Newznab** — works with autobrr, qui, cross-seed, and the entire \*arr family.
+- **Modern Go** — single static binary, Docker-first, low footprint, fast startup.
 
-Harbrr is being built for modern private tracker workflows from day one, with native consideration for autobrr, qui, cross-seed, and tracker-friendly automation practices while maintaining seamless compatibility with existing *arr applications.
-
-The goal isn't simply to proxy searches.
-
-The goal is to become the intelligent layer between automation applications and trackers.
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    A[Private Trackers & Indexers] --> B[Harbrr]
-    B --> C[autobrr]
-    B --> D[qui]
-    B --> E[cross-seed]
-    B --> F[*arr Apps]
-    F --> G[Sonarr]
-    F --> H[Radarr]
-    F --> I[Lidarr]
-    F --> J[Readarr]
-    F --> K[Mylar]
-    F --> L[Whisparr]
-```
+More detail on each of these lives in the
+**[feature docs](website/docs/features/)**.
 
 ---
 
-## Key Features
+## Security
 
-### Centralized Tracker Management
+harbrr treats tracker credentials as sensitive by default:
 
-Configure your trackers once.
+- Credentials (passkeys, cookies, API keys) are **encrypted at rest** (AES-256-GCM); the key
+  is auto-generated on first run.
+- The admin password and API keys are **hashed**, never stored recoverably.
+- Secrets are **redacted** from logs, errors, and traces; a passkey never appears in the
+  served Torznab feed — download links resolve server-side.
 
-Harbrr provides a single source of truth for tracker configuration, authentication, capabilities, categories, and search behavior across your automation stack.
-
-No more duplicating tracker setup across multiple applications.
-
----
-
-### Shared RSS Feed Caching
-
-Private trackers are a shared resource.
-
-Today, multiple applications often poll the same tracker for nearly identical information.
-
-Without Harbrr:
-
-```mermaid
-flowchart LR
-    A[Sonarr] --> E[Tracker]
-    B[Radarr] --> E
-    C[autobrr] --> E
-    D[cross-seed] --> E
-```
-
-With Harbrr:
-
-```mermaid
-flowchart LR
-    A[Sonarr] --> H[Harbrr]
-    B[Radarr] --> H
-    C[autobrr] --> H
-    D[cross-seed] --> H
-    H --> E[Tracker]
-```
-
-One request. Multiple consumers.
-
-Benefits include:
-
-- Reduced tracker load
-- Fewer duplicate requests
-- Lower API utilization
-- Faster downstream processing
-- Better private tracker citizenship
-- Improved scalability for larger automation stacks
+See [Configuration](website/docs/configuration.md) for key management and keyfile backup, and
+**[SECURITY.md](SECURITY.md)** to report a vulnerability privately.
 
 ---
 
-### Intelligent Search Deduplication
+## Roadmap & status
 
-A single release can trigger multiple searches from multiple applications.
-
-Instead of repeatedly sending identical searches to the same tracker, Harbrr is designed to intelligently reuse cached results whenever possible.
-
-This reduces:
-
-- Duplicate tracker queries
-- Search latency
-- Tracker load
-- API consumption
-- Unnecessary traffic
-
----
-
-### Built for autobrr
-
-Harbrr is designed to complement autobrr workflows rather than simply coexist with them.
-
-Planned optimizations include:
-
-- Shared tracker intelligence
-- Smarter RSS processing
-- Release reuse across applications
-- Reduced tracker load
-- Improved automation efficiency
-- Tracker-friendly polling strategies
-
----
-
-### Built for qui
-
-Harbrr is designed to work alongside qui as part of a modern automation ecosystem.
-
-By centralizing tracker access and search intelligence, Harbrr can provide a common foundation that multiple services can leverage without independently hammering the same trackers.
-
----
-
-### Cross-Seed Aware
-
-Cross-seeding has unique requirements that traditional indexer managers often overlook.
-
-Harbrr is being designed with cross-seed workflows in mind, including:
-
-- Smarter release matching
-- Search reuse and aggregation
-- Reduced duplicate tracker activity
-- Freeleech-aware matching
-- Optional freeleech bypass logic
-- Better reuse of existing tracker results
-
----
-
-### Cardigann Compatibility
-
-Harbrr is built around Cardigann-compatible indexer definitions.
-
-The project aims to leverage the extensive tracker definition ecosystem established by Cardigann, Jackett, and Prowlarr while modernizing the execution engine and overall architecture.
-
-This allows users to benefit from a mature tracker ecosystem without requiring an entirely new definition format.
-
----
-
-### Full Torznab Compatibility
-
-Harbrr works with:
-
-- autobrr
-- qui
-- cross-seed
-- Sonarr
-- Radarr
-- Lidarr
-- Readarr
-- Mylar
-- Whisparr
-- Any Torznab-compatible application
-
-Existing workflows continue to work while benefiting from Harbrr's centralized intelligence and optimization layer.
-
----
-
-### Modern Go Architecture
-
-Harbrr is written entirely in Go.
-
-Benefits include:
-
-- Lightweight deployment
-- Fast startup times
-- Low memory footprint
-- Single binary distribution
-- Docker-first deployments
-- Cross-platform support
-- Built-in interactive API docs (Swagger UI at `/api/docs`)
-
----
-
-### Security
-
-Harbrr treats tracker credentials as sensitive by default.
-
-- Tracker credentials (passkeys, cookies, API keys) are **encrypted at rest** (AES-256-GCM);
-  encryption is always on, with a key auto-generated on first run.
-- The admin password and API keys are **hashed**, never stored in a recoverable form.
-- Secrets are **redacted** from logs, errors, and traces, and a tracker passkey never appears
-  in the served Torznab feed — download links are resolved server-side.
-
-See [Configuration](website/docs/configuration.md) for key management and keyfile backup.
-
----
-
-## Philosophy
-
-Private trackers should be treated as a shared resource.
-
-Many automation stacks unintentionally generate excessive duplicate traffic through repeated RSS polling, repeated searches, and disconnected application behavior.
-
-Harbrr exists to solve that problem.
-
-Rather than every application independently talking to every tracker, Harbrr provides a centralized intelligence layer that can aggregate, cache, optimize, and distribute tracker data throughout your automation ecosystem.
-
-The result is a cleaner architecture, lower tracker load, and a better experience for both users and tracker operators.
-
----
-
-## Roadmap
-
-The executable, up-to-date roadmap lives in **[`docs/plan.md`](docs/plan.md)** — built
-top-to-bottom by risk retirement (engine parity first, product surface after). In short:
-
-- **Engine & parity** — Cardigann-compatible engine, proven offline against Jackett's own
-  tests and live against Prowlarr.
-- **Daemon** — SQLite store, encrypted secrets, management API + auth, Docker image.
-- **Coverage** — native drivers for the trackers Cardigann can't express (Avistaz family,
-  Gazelle/IPTorrents/FileList/MyAnonamouse), plus usenet/Newznab.
-- **Product** — \*arr/qui app-sync, the search-results cache and tracker-friendly pacing, and
-  (next) the web UI.
-
-See `docs/plan.md` for the current phase, what's shipped, and what's deferred.
-
----
-
-## Current Status
-
-🚧 **Alpha — operated via the API.**
-
-The hard part is done: the Cardigann engine is at parity with Jackett/Prowlarr (proven
-offline and live), native drivers cover the trackers Cardigann can't express, usenet/Newznab
-is supported, and harbrr syncs indexers into Sonarr/Radarr/qui. harbrr already works as a
-**Swagger-only Prowlarr replacement** — add and configure indexers, search, grab, and sync
-into your apps entirely over the HTTP API at `/api/docs`. A web UI is the next phase; until
-then the API is the interface.
-
-**Getting started:** see the [documentation](website/docs/getting-started.md) (install,
-first-run, mint a key, point Sonarr/Radarr at the feed). Roadmap and status detail live in
-[`docs/plan.md`](docs/plan.md).
+The executable, up-to-date roadmap lives in **[`docs/plan.md`](docs/plan.md)** — built by risk
+retirement (engine parity first, product surface after). In short: the engine and parity gate
+are done, the daemon (SQLite, encrypted secrets, management API, Docker) is done, native
+drivers and Newznab are in, and app-sync into \*arr/qui works. The **web UI** is the next
+phase.
 
 ---
 
 ## Contributing
 
 Contributions, testing, feedback, and ideas are welcome. Start with
-**[CONTRIBUTING.md](CONTRIBUTING.md)** — how to build and test, the commit conventions, and the
+**[CONTRIBUTING.md](CONTRIBUTING.md)** — how to build and test, commit conventions, and the
 non-negotiable rules — and please review the **[Code of Conduct](CODE_OF_CONDUCT.md)**. Found a
-security issue? See **[SECURITY.md](SECURITY.md)** and report it privately, not as a public issue.
+security issue? See **[SECURITY.md](SECURITY.md)** and report it privately, not as a public
+issue.
 
-Particularly helpful areas include:
-
-- Cardigann definitions
-- Tracker testing
-- Torznab interoperability
-- autobrr workflows
-- qui integration
-- cross-seed workflows
-- Go development
-- Private tracker automation
-
----
-
-## Vision
-
-Harbrr aims to become the central tracker and indexer fabric for the autobrr ecosystem.
-
-Configure trackers once.
-
-Connect everything.
-
-Search less.
-
-Cache more.
-
-Be kinder to your trackers.
+Especially helpful: Cardigann definitions, tracker testing, Torznab interoperability, and
+autobrr/qui/cross-seed integration.
 
 ---
 
 ## License
 
-harbrr is free software: you can redistribute it and/or modify it under the terms
-of the GNU General Public License as published by the Free Software Foundation,
-**either version 2 of the License, or (at your option) any later version**
-(GPL-2.0-or-later). The full GPL v2 text is in [LICENSE](LICENSE).
+harbrr is free software: you can redistribute it and/or modify it under the terms of the GNU
+General Public License as published by the Free Software Foundation, **either version 2 of the
+License, or (at your option) any later version** (GPL-2.0-or-later). The full text is in
+[LICENSE](LICENSE).
 
 ---
 
 ## Keywords
 
-autobrr, qui, cross-seed, Torznab, Cardigann, Prowlarr alternative, Jackett alternative, private trackers, torrent trackers, RSS caching, search deduplication, tracker intelligence, tracker middleware, indexer manager, indexer proxy, release automation, media automation, Sonarr, Radarr, Lidarr, Readarr, Mylar, Whisparr, Go, Golang, Docker
+autobrr, qui, cross-seed, Torznab, Newznab, Cardigann, Prowlarr alternative, Jackett
+alternative, private trackers, RSS caching, search deduplication, indexer manager, indexer
+proxy, Sonarr, Radarr, Lidarr, Readarr, Mylar, Whisparr, Go, Docker
