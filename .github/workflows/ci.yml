@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # Manual release fallback: dispatch this workflow against a `v*` tag to (re)run a
+  # release without re-tagging — goreleaser and the docker publish treat a dispatch
+  # aimed at a tag exactly like the tag push. Dispatching against a branch just runs CI.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -181,8 +185,9 @@ jobs:
           - { arch: arm64, load: false }
     env:
       IMAGE: ghcr.io/${{ github.repository }}
-      # Push to GHCR on a same-repo PR (testable before merge) or a version tag (release).
-      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) }}
+      # Push to GHCR on a same-repo PR (testable before merge) or a version tag (release,
+      # whether that tag arrived via push or a manual dispatch aimed at the tag).
+      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/')) }}
     steps:
       # The job pushes to a registry (packages: write) and runs no git operations after
       # checkout, so don't persist the token in the git config (smaller blast radius).
@@ -289,7 +294,7 @@ jobs:
     needs: [docker, test, golangci-lint]
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
       packages: write
