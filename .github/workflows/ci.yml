@@ -41,8 +41,8 @@ jobs:
   # OS-specific files or build tags and ships as a Linux binary/container, so a single
   # Linux leg with the race detector is authoritative; cross-build below covers the other
   # platforms and vet is covered by the golangci-lint (govet) job.
-  test:
-    name: test
+  backend-test:
+    name: backend-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -432,7 +432,7 @@ jobs:
   docker-merge:
     name: docker-merge
     runs-on: ubuntu-latest
-    needs: [docker, test, web-test, golangci-lint, web-lint, web-typecheck]
+    needs: [docker, backend-test, web-test, golangci-lint, web-lint, web-typecheck]
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
       ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/'))
@@ -487,7 +487,7 @@ jobs:
     name: goreleaser
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [test, web-test, golangci-lint, web-lint, web-typecheck, web]
+    needs: [backend-test, web-test, golangci-lint, web-lint, web-typecheck, web]
     permissions:
       contents: write # create the GitHub Release (tag runs only)
     steps:
