@@ -3,8 +3,8 @@
 > **Operators:** for the built-in, no-toolchain golden smoke test — `harbrr smoke` (interactive
 > first-run, runs natively or `docker exec … harbrr smoke`, writes a shareable secret-scrubbed
 > `smoke-report.md`) — see the user guide: `website/docs/guides/smoke-test.md`. The rest of this
-> doc is the **developer** differential harness (`make smoke-test`), which adds trackers with live
-> per-tracker credentials and shares the same parity engine (`internal/smoke`).
+> doc is the **developer** differential harness (`make smoke-test`), which discovers already-enabled
+> indexers in a running daemon and shares the same parity engine (`internal/smoke`).
 
 The live smoke (`make smoke-test`) drives a **running harbrr daemon** like a real
 *arr: it discovers the indexers already configured and enabled in the daemon,
