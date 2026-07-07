@@ -255,8 +255,37 @@ func resolveSliceVar(path string, ctx *Context) []string {
 //
 // Multi-segment maps chain index calls. References that are already valid Go
 // (no offending segment) are left untouched.
+//
+// Only text inside {{ ... }} action spans is rewritten: Jackett's
+// applyGoTemplateText pattern-matches variables inside actions only, and
+// literal text — including values spliced in by the expandFuncs phase, such as
+// a dotted keyword like "Hotel.del.Luna.2019.1080p" — must pass through
+// verbatim, never mangled into (index ...) form.
+//
+// Action spans are located by scanning to the first "}}" after each "{{"
+// rather than with a full template lexer. That would mis-terminate an action
+// holding "}}" inside a quoted string (e.g. {{ "}}" }}), but no vendored
+// definition does that, and a mis-split only skips a rewrite — the original
+// text still reaches the stdlib parser. Text after an unclosed "{{" is left
+// as literal for the parser to report.
 func rewriteBadIdentRefs(text string) string {
-	return badIdentRefRe.ReplaceAllStringFunc(text, rewriteOneRef)
+	var b strings.Builder
+	for {
+		open := strings.Index(text, "{{")
+		if open < 0 {
+			break
+		}
+		span := strings.Index(text[open:], "}}")
+		if span < 0 {
+			break
+		}
+		end := open + span + 2
+		b.WriteString(text[:open])
+		b.WriteString(badIdentRefRe.ReplaceAllStringFunc(text[open:end], rewriteOneRef))
+		text = text[end:]
+	}
+	b.WriteString(text)
+	return b.String()
 }
 
 func rewriteOneRef(ref string) string {
