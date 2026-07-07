@@ -159,13 +159,55 @@ func TestBuildCategoriesObjectHasNoDefaults(t *testing.T) {
 	t.Parallel()
 	caps, err := Build(&loader.Definition{
 		ID: "o", Links: []string{"https://o.test/"},
-		Caps: loader.Caps{Categories: map[string]string{"1": "Movies"}},
+		Caps: loader.Caps{Categories: loader.NewCategoriesBlock(
+			loader.CategoryEntry{TrackerID: "1", Name: "Movies"},
+		)},
 	})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if len(caps.DefaultCategories) != 0 {
 		t.Errorf("object-form caps.categories should have no defaults, got %v", caps.DefaultCategories)
+	}
+}
+
+// TestBuildCategoriesObjectPreservesDefinitionOrder proves the object form
+// builds the category map in definition (YAML) order, mirroring Jackett's
+// insertion-ordered _categoryMapping (YamlDotNet preserves document order).
+// The order is observable on the wire: a multi-cat query's tracker ids reach
+// {{ .Categories }} in category-map entry order, so with the pre-fix
+// map[string]string decode these bytes were randomized per process. The ids
+// here are deliberately out of lexical order, and the reverse lookup is
+// queried in a shuffled request order to show entry order alone decides.
+func TestBuildCategoriesObjectPreservesDefinitionOrder(t *testing.T) {
+	t.Parallel()
+	caps, err := Build(&loader.Definition{
+		ID: "ordered", Links: []string{"https://o.test/"},
+		Caps: loader.Caps{Categories: loader.NewCategoriesBlock(
+			loader.CategoryEntry{TrackerID: "z9", Name: "Movies/HD"},    // 2040
+			loader.CategoryEntry{TrackerID: "5", Name: "TV/SD"},         // 5030
+			loader.CategoryEntry{TrackerID: "a1", Name: "Audio/MP3"},    // 3010
+			loader.CategoryEntry{TrackerID: "42", Name: "Books/Comics"}, // 7030
+			loader.CategoryEntry{TrackerID: "m", Name: "PC/Games"},      // 4050
+			loader.CategoryEntry{TrackerID: "1", Name: "Movies/SD"},     // 2030
+		)},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	want := []string{"z9", "5", "a1", "42", "m", "1"}
+
+	entryOrder := make([]string, 0, len(caps.CategoryMap.entries))
+	for _, e := range caps.CategoryMap.entries {
+		entryOrder = append(entryOrder, e.trackerCategory)
+	}
+	if !reflect.DeepEqual(entryOrder, want) {
+		t.Errorf("CategoryMap entry order = %v, want %v (definition order)", entryOrder, want)
+	}
+
+	got := caps.MapTorznabCapsToTrackers([]int{2030, 7030, 3010, 5030, 4050, 2040})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("MapTorznabCapsToTrackers = %v, want %v (definition order)", got, want)
 	}
 }
 
@@ -194,7 +236,9 @@ func TestBuildUnknownCategoryIsLoudError(t *testing.T) {
 	t.Run("categories object name", func(t *testing.T) {
 		t.Parallel()
 		def := &loader.Definition{ID: "bogus_obj"}
-		def.Caps.Categories = map[string]string{"7": "Nope/Nope"}
+		def.Caps.Categories = loader.NewCategoriesBlock(
+			loader.CategoryEntry{TrackerID: "7", Name: "Nope/Nope"},
+		)
 		_, err := Build(def)
 		if err == nil {
 			t.Fatal("Build should fail on unknown category name")
@@ -272,9 +316,9 @@ func TestCorpusSmoke(t *testing.T) {
 }
 
 func collectUnknownNames(def *loader.Definition, unknown map[string]int) {
-	for _, name := range def.Caps.Categories {
-		if _, ok := GetByName(name); !ok {
-			unknown[name]++
+	for _, e := range def.Caps.Categories.Ordered() {
+		if _, ok := GetByName(e.Name); !ok {
+			unknown[e.Name]++
 		}
 	}
 	for _, cm := range def.Caps.CategoryMappings {

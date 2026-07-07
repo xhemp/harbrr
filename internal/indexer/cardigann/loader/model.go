@@ -62,12 +62,89 @@ func (d *Definition) EffectiveProtocol() string {
 // CategoryMappings is present (schema oneOf), but both are modelled so the
 // loader stays lossless.
 type Caps struct {
-	Categories        map[string]string `yaml:"categories,omitempty"`
+	Categories        CategoriesBlock   `yaml:"categories,omitempty"`
 	CategoryMappings  []CategoryMapping `yaml:"categorymappings,omitempty"`
 	Modes             Modes             `yaml:"modes"`
 	AllowRawSearch    *bool             `yaml:"allowrawsearch,omitempty"`
 	AllowTVSearchIMDB *bool             `yaml:"allowtvsearchimdb,omitempty"`
 }
+
+// CategoryEntry is one (tracker id -> standard category name) pair from the
+// caps.categories object form, in definition order.
+type CategoryEntry struct {
+	TrackerID string
+	Name      string
+}
+
+// CategoriesBlock is the order-preserving caps.categories object form
+// (tracker category id -> standard category name). Jackett deserializes this
+// block into a YamlDotNet Dictionary, which preserves YAML document order, and
+// appends to _categoryMapping in that order; the order reaches the rendered
+// {{ .Categories }} request bytes (mapper querycats -> search request), so a
+// plain Go map's randomized iteration would diverge from Jackett and vary
+// across restarts. Mirrors InputsBlock/FieldsBlock: keys records source order,
+// names the values.
+type CategoriesBlock struct {
+	keys  []string
+	names map[string]string
+}
+
+// NewCategoriesBlock builds a CategoriesBlock from ordered entries, preserving
+// the given order (first position, last value on a duplicate key). The loader
+// builds these via UnmarshalYAML; this constructor is for assembling
+// definitions directly (e.g. in tests) without losing order to a Go map
+// literal.
+func NewCategoriesBlock(entries ...CategoryEntry) CategoriesBlock {
+	cb := CategoriesBlock{names: make(map[string]string, len(entries))}
+	for _, e := range entries {
+		if _, seen := cb.names[e.TrackerID]; !seen {
+			cb.keys = append(cb.keys, e.TrackerID)
+		}
+		cb.names[e.TrackerID] = e.Name
+	}
+	return cb
+}
+
+// UnmarshalYAML decodes a mapping node into an order-preserving
+// CategoriesBlock, keeping a duplicate key's FIRST position but LAST value
+// (go-yaml map semantics), exactly as InputsBlock and FieldsBlock do.
+func (cb *CategoriesBlock) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("categories: expected a mapping, got %s", kindName(node.Kind))
+	}
+	cb.keys = cb.keys[:0]
+	cb.names = make(map[string]string, len(node.Content)/2)
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		var name string
+		if err := node.Content[i+1].Decode(&name); err != nil {
+			return fmt.Errorf("categories: decoding category %q: %w", key, err)
+		}
+		if _, seen := cb.names[key]; !seen {
+			cb.keys = append(cb.keys, key)
+		}
+		cb.names[key] = name
+	}
+	return nil
+}
+
+// Ordered returns the category entries in definition (YAML) order.
+func (cb CategoriesBlock) Ordered() []CategoryEntry {
+	out := make([]CategoryEntry, 0, len(cb.keys))
+	for _, k := range cb.keys {
+		out = append(out, CategoryEntry{TrackerID: k, Name: cb.names[k]})
+	}
+	return out
+}
+
+// Get returns the category name for a tracker id and whether it is present.
+func (cb CategoriesBlock) Get(trackerID string) (string, bool) {
+	name, ok := cb.names[trackerID]
+	return name, ok
+}
+
+// Len reports the number of categories.
+func (cb CategoriesBlock) Len() int { return len(cb.keys) }
 
 // CategoryMapping mirrors CategoryMapping. The id is a scalar union
 // (integer|string) normalized to its string form.

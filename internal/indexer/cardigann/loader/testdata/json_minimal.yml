@@ -9,8 +9,14 @@ links:
   - https://example.invalid/
 
 caps:
+  # Keys deliberately out of lexical order ("2" < "9" < "XXX" < "movies-hd" <
+  # "zz") to prove document-order decode (TestCategoriesBlockPreservesOrder).
   categories:
     XXX: XXX
+    9: TV
+    movies-hd: Movies/HD
+    2: Audio
+    zz: Books
   modes:
     search: [q]
     movie-search: [q, imdbid]
