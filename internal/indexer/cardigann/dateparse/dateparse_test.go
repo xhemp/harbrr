@@ -259,6 +259,14 @@ func TestParseRelTime(t *testing.T) {
 		{"yesterday-time", "yesterday 14:22", "2024-05-31T14:22:00Z"},
 		{"today-time", "today 08:00", "2024-06-01T08:00:00Z"},
 		{"tomorrow", "tomorrow", "2024-06-02T00:00:00Z"},
+		{"bare-today", "today", "2024-06-01T00:00:00Z"},
+		// IP.Board/XenForo forms: Jackett's named-day regexes consume the comma
+		// and optional "at", and the remainder parses with am/pm support.
+		{"today-comma-time", "Today, 14:22", "2024-06-01T14:22:00Z"},
+		{"today-comma-at-time", "Today, at 14:22", "2024-06-01T14:22:00Z"},
+		{"today-at-time", "today at 14:22", "2024-06-01T14:22:00Z"},
+		{"yesterday-comma-pm", "Yesterday, 10:11 pm", "2024-05-31T22:11:00Z"},
+		{"yesterday-comma-am", "Yesterday, 10:11 am", "2024-05-31T10:11:00Z"},
 		{"unix-seconds", "1577880000", "2020-01-01T12:00:00Z"},
 		// PARITY: Jackett treats EVERY all-digit value as seconds (no millis
 		// heuristic), so a 13-digit value renders as a far-future seconds
@@ -320,6 +328,11 @@ func TestParseRelTimeFailure(t *testing.T) {
 	p := dateparse.New(dateparse.WithClock(fixedClock()))
 	if _, err := p.ParseRelTime("gibberish"); err == nil {
 		t.Fatal("expected error for unparseable relative value, got nil")
+	}
+	// Named day with an unparseable trailing time: Jackett's DateTime.Parse
+	// throws out of FromUnknown, so this must error — never silent midnight.
+	if _, err := p.ParseRelTime("today blah"); err == nil {
+		t.Fatal("expected error for unparseable time after named day, got nil")
 	}
 }
 

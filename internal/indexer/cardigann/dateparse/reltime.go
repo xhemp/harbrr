@@ -54,7 +54,8 @@ var humanLayouts = []string{
 //   - "now"/"just now" -> the reference clock.
 //   - unix timestamp (all digits): always seconds (matches Jackett FromUnknown).
 //   - ISO 8601 / RFC1123Z absolute strings.
-//   - "yesterday"/"today"/"tomorrow [HH:mm]" -> clock date +/- a day.
+//   - "yesterday"/"today"/"tomorrow [, ] [at ] [HH:mm | h:mm am/pm]" -> clock
+//     date +/- a day, at the given time (midnight when absent).
 //   - "N unit(s) ago" (sec/min/hour|hr/day/week|wk/month/year) -> offset from now.
 //
 // Localized relative terms (e.g. Russian назад/вчера/сегодня) are normalized to
@@ -72,7 +73,10 @@ func (p *Parser) ParseRelTime(value string) (string, error) {
 	if t, ok := parseAbsolute(v, lower, now); ok {
 		return t.Format(canonicalLayout), nil
 	}
-	if t, ok := parseNamedDay(lower, now); ok {
+	if t, matched, err := parseNamedDay(lower, now); matched {
+		if err != nil {
+			return "", fmt.Errorf("%w: relative value %q: %w", ErrUnparseable, value, err)
+		}
 		return t.Format(canonicalLayout), nil
 	}
 	if t, ok := parseTimeAgo(lower, now); ok {
@@ -121,45 +125,63 @@ func parseUnix(v string) (time.Time, bool) {
 	return time.Unix(n, 0).UTC(), true
 }
 
-// parseNamedDay handles "today"/"yesterday"/"tomorrow" with an optional trailing
-// "HH:mm[:ss]" time component, anchored to the reference clock's date.
-func parseNamedDay(lower string, now time.Time) (time.Time, bool) {
-	offsets := []struct {
-		word string
-		days int
-	}{
-		{"yesterday", -1},
-		{"tomorrow", 1},
-		{"today", 0},
-	}
-	for _, o := range offsets {
-		if !strings.Contains(lower, o.word) {
-			continue
-		}
-		rest := strings.TrimSpace(strings.Replace(lower, o.word, "", 1))
-		dur := parseClockTime(rest)
-		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		return day.AddDate(0, 0, o.days).Add(dur), true
-	}
-	return time.Time{}, false
+// namedDayPatterns mirror Jackett's _TodayRegexp/_YesterdayRegexp/_TomorrowRegexp
+// (`(?i)\btoday(?:[\s,]+(?:at){0,1}\s*|[\s,]*|$)`): the match consumes the day
+// word AND its trailing separator — whitespace/commas plus an optional "at" — so
+// the remainder is a bare time-of-day ("Today, at 14:22" leaves "14:22").
+// Jackett's `|$` alternative is unreachable (`[\s,]*` already matches empty) and
+// is omitted. Patterns are lowercase because ParseRelTime lowers the input.
+var namedDayPatterns = []struct {
+	re   *regexp.Regexp
+	days int
+}{
+	{regexp.MustCompile(`\btoday(?:[\s,]+(?:at)?\s*|[\s,]*)`), 0},
+	{regexp.MustCompile(`\byesterday(?:[\s,]+(?:at)?\s*|[\s,]*)`), -1},
+	{regexp.MustCompile(`\btomorrow(?:[\s,]+(?:at)?\s*|[\s,]*)`), 1},
 }
 
-// parseClockTime extracts a leading/embedded HH:mm[:ss] from rest as a duration
-// since midnight; absent or unparseable yields zero (midnight).
-func parseClockTime(rest string) time.Duration {
-	rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), "at"))
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
-		return 0
+// parseNamedDay handles "today"/"yesterday"/"tomorrow" with an optional trailing
+// time-of-day, anchored to the reference clock's date. Once a day word matches
+// we commit, as Jackett does: a non-empty remainder that is not a parseable time
+// is an error (Jackett's DateTime.Parse throws out of FromUnknown), never a
+// silent midnight.
+func parseNamedDay(lower string, now time.Time) (time.Time, bool, error) {
+	for _, nd := range namedDayPatterns {
+		m := nd.re.FindString(lower)
+		if m == "" {
+			continue
+		}
+		dur, err := parseClockTime(strings.TrimSpace(strings.Replace(lower, m, "", 1)))
+		if err != nil {
+			return time.Time{}, true, err
+		}
+		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		return day.AddDate(0, 0, nd.days).Add(dur), true, nil
 	}
-	for _, layout := range []string{"15:04:05", "15:04"} {
+	return time.Time{}, false, nil
+}
+
+// clockLayouts are the time-of-day forms Jackett's remainder parse
+// (DateTime.Parse(time).TimeOfDay) accepts on realistic feed input: 24h with
+// optional seconds, plus 12h am/pm variants.
+var clockLayouts = []string{"15:04:05", "15:04", "3:04:05 PM", "3:04 PM", "3:04PM", "3 PM", "3PM"}
+
+// parseClockTime parses rest as a duration since midnight. Empty means the day
+// alone (Jackett's ParseTimeSpan returns TimeSpan.Zero); a non-empty rest that
+// matches no layout is an error, mirroring DateTime.Parse throwing.
+func parseClockTime(rest string) (time.Duration, error) {
+	if rest == "" {
+		return 0, nil
+	}
+	rest = normalizeAMPM(rest)
+	for _, layout := range clockLayouts {
 		if t, err := time.Parse(layout, rest); err == nil {
 			return time.Duration(t.Hour())*time.Hour +
 				time.Duration(t.Minute())*time.Minute +
-				time.Duration(t.Second())*time.Second
+				time.Duration(t.Second())*time.Second, nil
 		}
 	}
-	return 0
+	return 0, fmt.Errorf("unparseable time-of-day %q after named day", rest)
 }
 
 // parseTimeAgo reproduces Jackett FromTimeAgo: strip "ago"/"and"/commas, sum each
