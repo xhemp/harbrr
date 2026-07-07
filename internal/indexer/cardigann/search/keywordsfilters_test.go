@@ -19,22 +19,25 @@ func TestBuildRequests_KeywordsFilters(t *testing.T) {
 	tests := []struct {
 		name     string
 		filters  []loader.FilterBlock
-		keywords string
+		query    Query
 		wantQ    string
+		wantRawQ string
 		wantPath string
 	}{
 		{
 			name:     "no filters is a no-op",
 			filters:  nil,
-			keywords: "big buck bunny",
+			query:    Query{Keywords: "big buck bunny"},
 			wantQ:    "big buck bunny",
+			wantRawQ: "big buck bunny",
 			wantPath: "/search/big buck bunny",
 		},
 		{
 			name:     "re_replace joins words",
 			filters:  []loader.FilterBlock{{Name: "re_replace", Args: loader.FilterArgs{`\s+`, "+"}}},
-			keywords: "big buck bunny",
+			query:    Query{Keywords: "big buck bunny"},
 			wantQ:    "big+buck+bunny",
+			wantRawQ: "big buck bunny",
 			wantPath: "/search/big+buck+bunny",
 		},
 		{
@@ -43,9 +46,18 @@ func TestBuildRequests_KeywordsFilters(t *testing.T) {
 				{Name: "tolower"},
 				{Name: "re_replace", Args: loader.FilterArgs{`\s+`, "."}},
 			},
-			keywords: "Big Buck Bunny",
+			query:    Query{Keywords: "Big Buck Bunny"},
 			wantQ:    "big.buck.bunny",
+			wantRawQ: "Big Buck Bunny",
 			wantPath: "/search/big.buck.bunny",
+		},
+		{
+			name:     "episode token joins before filters run",
+			filters:  []loader.FilterBlock{{Name: "re_replace", Args: loader.FilterArgs{`\s+`, "."}}},
+			query:    Query{Keywords: "Big Buck", Season: "1", Ep: "2"},
+			wantQ:    "Big.Buck.S01E02",
+			wantRawQ: "Big Buck S01E02",
+			wantPath: "/search/Big.Buck.S01E02",
 		},
 	}
 
@@ -66,7 +78,7 @@ func TestBuildRequests_KeywordsFilters(t *testing.T) {
 			}
 			deps := Deps{BaseURL: "https://kw.invalid/", Filters: filter.NewRegistry()}
 
-			reqs, err := buildRequests(def, Query{Keywords: tt.keywords}, deps)
+			reqs, err := buildRequests(def, tt.query, deps)
 			if err != nil {
 				t.Fatalf("buildRequests: %v", err)
 			}
@@ -83,8 +95,8 @@ func TestBuildRequests_KeywordsFilters(t *testing.T) {
 			if got := u.Query().Get("q"); got != tt.wantQ {
 				t.Errorf("input q = %q, want %q (.Keywords)", got, tt.wantQ)
 			}
-			if got := u.Query().Get("rawq"); got != tt.keywords {
-				t.Errorf("input rawq = %q, want %q (.Query.Keywords must stay raw)", got, tt.keywords)
+			if got := u.Query().Get("rawq"); got != tt.wantRawQ {
+				t.Errorf("input rawq = %q, want %q (.Query.Keywords is the raw joined term, unfiltered)", got, tt.wantRawQ)
 			}
 		})
 	}

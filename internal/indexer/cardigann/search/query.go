@@ -1,6 +1,8 @@
 package search
 
 import (
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -86,19 +88,74 @@ func (q Query) isIDSearch() bool {
 		q.TVMazeID != "" || q.TraktID != "" || q.DoubanID != "" || q.RageID != ""
 }
 
-// keywords reproduces Jackett's KeywordTokens join: Q + Series + Movie + Year +
-// Episode, whitespace-joined. harbrr models Keywords as the already-joined term,
-// so this simply trims; the Year token is appended when present (the only extra
-// token the corpus request templates rely on beyond the bare term).
+// keywords reproduces Jackett's KeywordTokens join (PerformQuery): Q, Series,
+// Movie, Year, then the formatted episode string, single-space-joined with
+// empty tokens skipped. harbrr models Keywords as the already-joined Q term and
+// Jackett initializes .Query.Series/.Query.Movie to null, so the effective
+// tokens are Keywords + Year + episodeSearchString. This joined value is what
+// keywordsfilters run over — the episode token is part of the filtered base.
 func (q Query) keywords() string {
-	tokens := make([]string, 0, 2)
+	tokens := make([]string, 0, 3)
 	if t := strings.TrimSpace(q.Keywords); t != "" {
 		tokens = append(tokens, t)
 	}
 	if y := strings.TrimSpace(q.Year); y != "" {
 		tokens = append(tokens, y)
 	}
+	if e := q.episodeSearchString(); e != "" {
+		tokens = append(tokens, e)
+	}
 	return strings.Join(tokens, " ")
+}
+
+// episodeSearchString reproduces Jackett's TorznabQuery.GetEpisodeSearchString,
+// the formatted season/episode token joined into KeywordTokens and exposed as
+// .Query.Episode. An absent or zero season yields "" (even with an episode
+// set); a daily search — season carries the four-digit year, ep is "MM/dd" —
+// renders "yyyy.MM.dd"; a season alone renders "S%02d"; a numeric episode
+// renders "S%02dE%02d". A non-numeric episode is appended raw ("S03E2v2") —
+// a deliberate, benign divergence from Jackett, whose ParseUtil.CoerceInt
+// digit-strips ("2v2" -> 22) before formatting; both branches are unreachable
+// from a real torznab client (Sonarr/Prowlarr send numeric episodes), and
+// Jackett's stripped output is meaningless. Jackett's Season is an int? coerced
+// at request parse, so a non-numeric season string means no season there —
+// treat it as absent.
+func (q Query) episodeSearchString() string {
+	season, err := strconv.Atoi(strings.TrimSpace(q.Season))
+	if err != nil || season == 0 {
+		return ""
+	}
+	ep := strings.TrimSpace(q.Ep)
+	if date, ok := dailyEpisodeDate(season, ep); ok {
+		return date
+	}
+	if ep == "" {
+		return fmt.Sprintf("S%02d", season)
+	}
+	if epNum, err := strconv.Atoi(ep); err == nil {
+		return fmt.Sprintf("S%02dE%02d", season, epNum)
+	}
+	return fmt.Sprintf("S%02dE%s", season, ep)
+}
+
+// dailyEpisodePattern guards the daily-episode parse with ParseExact's fixed
+// digit widths ("yyyy MM/dd"), which Go's lenient time.Parse would otherwise
+// relax (e.g. accepting a single-digit month Jackett rejects).
+var dailyEpisodePattern = regexp.MustCompile(`^\d{4} \d{2}/\d{2}$`)
+
+// dailyEpisodeDate reproduces Jackett's
+// DateTime.TryParseExact($"{Season} {Episode}", "yyyy MM/dd") branch: a daily
+// show search renders "yyyy.MM.dd" instead of an SxxExx token.
+func dailyEpisodeDate(season int, ep string) (string, bool) {
+	joined := strconv.Itoa(season) + " " + ep
+	if !dailyEpisodePattern.MatchString(joined) {
+		return "", false
+	}
+	d, err := time.Parse("2006 01/02", joined)
+	if err != nil {
+		return "", false
+	}
+	return d.Format("2006.01.02"), true
 }
 
 // templateKeywords is the value the top-level .Keywords template variable and
@@ -132,9 +189,15 @@ func (q Query) queryMap() map[string]string {
 	set("TraktID", q.TraktID)
 	set("DoubanID", q.DoubanID)
 	set("TVRageID", q.RageID)
-	set("Season", q.Season)
+	// .Query.Season is nulled for season 0 (Jackett: query.Season > 0 ? ... :
+	// null — a Sonarr specials search templates ""); .Query.Ep stays raw while
+	// .Query.Episode is the FORMATTED episode string, matching Jackett's
+	// variables[".Query.Episode"] = query.GetEpisodeSearchString().
+	if q.Season != "0" {
+		set("Season", q.Season)
+	}
 	set("Ep", q.Ep)
-	set("Episode", q.Ep)
+	set("Episode", q.episodeSearchString())
 	set("Year", q.Year)
 	set("Artist", q.Artist)
 	set("Album", q.Album)
