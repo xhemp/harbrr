@@ -175,8 +175,10 @@ func storeField(state *rowState, name string, modifiers []string, value string) 
 
 // applyRowFilters reproduces ParseRowFilters: returns true (skip the row) when an
 // andmatch filter's keywords are not all present in the title. andmatch is
-// skipped entirely for ID-based searches (imdb/tmdb/...), matching Jackett.
-// strdump and unknown names never skip.
+// skipped entirely for ID-based searches (imdb/tmdb/...), matching Jackett. The
+// keywords are the keywordsfilters-FILTERED term (Jackett's andmatch reads the
+// .Keywords variable, set after Keywordsfilters ran). strdump and unknown names
+// never skip.
 func applyRowFilters(filters []loader.RowFilterBlock, title string, query Query) bool {
 	for i := range filters {
 		if filters[i].Name != "andmatch" {
@@ -185,7 +187,7 @@ func applyRowFilters(filters []loader.RowFilterBlock, title string, query Query)
 		if query.isIDSearch() {
 			continue
 		}
-		if !filter.AndMatch(title, query.keywords()) {
+		if !filter.AndMatch(title, query.templateKeywords()) {
 			return true
 		}
 	}
@@ -206,7 +208,7 @@ func bindEval(deps Deps, query Query, result map[string]string) {
 // required because template.Eval mutates it.
 func evalTemplate(deps Deps, query Query, result map[string]string, text string) (string, error) {
 	config := withSitelink(deps.Config, deps.BaseURL)
-	ctx := newContext(config, query.queryMap(), result, query.keywords(), query.Categories, deps.Clock)
+	ctx := newContext(config, query.queryMap(), result, query.templateKeywords(), query.Categories, deps.Clock)
 	out, err := template.Eval(text, ctx)
 	if err != nil {
 		return "", fmt.Errorf("evaluating field template: %w", err)

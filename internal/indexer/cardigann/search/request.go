@@ -45,6 +45,10 @@ type builtRequest struct {
 // resolve it against BaseURL, assemble the inputs (inherited Search.Inputs then
 // path Inputs) into a GET query string or POST body, and attach Search.Headers.
 func buildRequests(def *loader.Definition, query Query, deps Deps) ([]builtRequest, error) {
+	query, err := applyKeywordsFilters(def, query, deps)
+	if err != nil {
+		return nil, err
+	}
 	paths := searchPaths(def)
 	out := make([]builtRequest, 0, len(paths))
 	for i := range paths {
@@ -103,7 +107,7 @@ func buildOneRequest(def *loader.Definition, path loader.SearchPathBlock, query 
 // mutates it).
 func requestContext(query Query, deps Deps) *template.Context {
 	config := withSitelink(deps.Config, deps.BaseURL)
-	return newContext(config, query.queryMap(), nil, query.keywords(), query.Categories, deps.Clock)
+	return newContext(config, query.queryMap(), nil, query.templateKeywords(), query.Categories, deps.Clock)
 }
 
 // requestPathContext is requestContext with every scalar variable value
@@ -114,7 +118,7 @@ func requestContext(query Query, deps Deps) *template.Context {
 func requestPathContext(query Query, deps Deps) *template.Context {
 	config := encodeStringValues(withSitelink(deps.Config, deps.BaseURL))
 	return newContext(config, encodeStringValues(query.queryMap()), nil,
-		pathEscape(query.keywords()), encodeStringSlice(query.Categories), deps.Clock)
+		pathEscape(query.templateKeywords()), encodeStringSlice(query.Categories), deps.Clock)
 }
 
 // pathEscape URL-encodes a value for inlining into a path/query, with spaces as

@@ -85,6 +85,14 @@ func ParseResults(def *loader.Definition, body []byte, respType string, query Qu
 	// Engine cannot race on the selector.
 	deps.Selector = selector.New()
 
+	// Filter the keyword term before any row/field templating, so .Keywords and
+	// the andmatch row filter see the same keywordsfilters-filtered value the
+	// request was built with (Jackett sets .Keywords once in PerformQuery).
+	query, err := applyKeywordsFilters(def, query, deps)
+	if err != nil {
+		return nil, err
+	}
+
 	doc, err := parseDocument(deps.Selector, body, respType)
 	if err != nil {
 		return nil, err

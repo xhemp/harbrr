@@ -69,6 +69,13 @@ type Query struct {
 	// NOT part of the search-cache key — honor and bypass share one cached full-set entry,
 	// and the decorator narrows it post-cache. See docs/plan.md Phase-11.
 	FreeleechBypass bool
+
+	// keywordsFiltered, when non-nil, is the joined keyword term after the
+	// definition's search.keywordsfilters ran over it. Set by applyKeywordsFilters
+	// at the executor entry points; nil means the definition declares no
+	// keywordsfilters. templateKeywords reads it; .Query.Keywords always stays raw
+	// (queryMap), matching Jackett, which filters only the .Keywords variable.
+	keywordsFiltered *string
 }
 
 // isIDSearch reports whether any ID-style param is set. Jackett skips the
@@ -92,6 +99,18 @@ func (q Query) keywords() string {
 		tokens = append(tokens, y)
 	}
 	return strings.Join(tokens, " ")
+}
+
+// templateKeywords is the value the top-level .Keywords template variable and
+// the andmatch row filter read: the keywordsfilters-filtered term when the
+// definition declares filters (applyKeywordsFilters), the raw joined term
+// otherwise. Jackett sets variables[".Keywords"] to the filtered value before
+// request templating, and its andmatch reads the same variable.
+func (q Query) templateKeywords() string {
+	if q.keywordsFiltered != nil {
+		return *q.keywordsFiltered
+	}
+	return q.keywords()
 }
 
 // queryMap renders the Query fields into the .Query.<name> template namespace,
