@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
+	apphttp "github.com/autobrr/harbrr/internal/http"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
@@ -16,16 +17,20 @@ const baseURL = "https://tracker.example"
 
 func scalar(v string) loader.Scalar { return loader.Scalar{Value: v, Set: true} }
 
-// newExec builds an executor wired to the replay transport with a real
-// publicsuffix cookie jar (so cookie capture across steps is exercised offline).
+// newExec builds an executor wired the production way: the replay transport sits
+// inside a REAL *http.Client owning a publicsuffix cookie jar, and the executor
+// shares that SAME jar (the engine's buildLogin wiring). Cookies therefore flow
+// via the one client jar — applied on every hop, recorded from every hop —
+// exactly as on the live path; the executor itself never touches the wire.
 func newExec(t *testing.T, rt *replayTransport, cfg map[string]string) *Executor {
 	t.Helper()
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		t.Fatalf("cookiejar.New: %v", err)
 	}
+	client := &stdhttp.Client{Transport: rt, Jar: jar, CheckRedirect: apphttp.RedirectPolicy}
 	return New(
-		WithClient(rt),
+		WithClient(client),
 		WithJar(jar),
 		WithBaseURL(baseURL),
 		WithConfig(cfg),
@@ -391,31 +396,75 @@ func TestNoLoginBlock(t *testing.T) {
 	}
 }
 
-func TestSessionExposesJar(t *testing.T) {
+// TestLoginRotatedSessionCookie pins the single-jar invariant at the login
+// level: when the login POST's 302 response ROTATES the session cookie (PHP
+// session_regenerate_id), the shared client jar records the fresh value from
+// that redirect hop, and the next request (login.test) carries EXACTLY the
+// fresh pair — never a stale-first duplicate, which a tracker would read as
+// the logged-out session.
+func TestLoginRotatedSessionCookie(t *testing.T) {
 	t.Parallel()
 
 	rt := newReplay(
 		t,
+		// 1. GET landing page -> pre-login session cookie.
+		step{
+			wantMethod: stdhttp.MethodGet,
+			wantPath:   "/login.php",
+			respHeader: setCookieHeader("session=stale-prelogin; Path=/"),
+			bodyFile:   "login_page.html",
+		},
+		// 2. POST credentials -> 302 rotating the session cookie, followed by the
+		//    client to the landed page (step 3).
+		step{
+			wantMethod: stdhttp.MethodPost,
+			wantPath:   "/takelogin.php",
+			status:     stdhttp.StatusFound,
+			respHeader: stdhttp.Header{
+				"Set-Cookie": {"session=fresh-postlogin; Path=/"},
+				"Location":   {"/index.php"},
+			},
+		},
+		// 3. The followed redirect target.
+		step{wantMethod: stdhttp.MethodGet, wantPath: "/index.php", bodyFile: "logged_in.html"},
+		// 4. CheckTest probe: must carry ONLY the rotated cookie.
 		step{wantMethod: stdhttp.MethodGet, wantPath: "/index.php", bodyFile: "logged_in.html"},
 	)
 	def := &loader.Definition{Login: &loader.Login{
-		Method: "cookie",
-		Inputs: map[string]loader.Scalar{"cookie": scalar("{{ .Config.cookie }}")},
+		Method: "form",
+		Path:   "login.php",
+		Form:   "form#loginform",
+		Inputs: map[string]loader.Scalar{"username": scalar("{{ .Config.username }}")},
 		Test:   &loader.PageTestBlock{Path: "index.php", Selector: "a[href^=\"/logout.php\"]"},
 	}}
-	e := newExec(t, rt, map[string]string{"cookie": "uid=42"})
+	e := newExec(t, rt, map[string]string{"username": "alice"})
 
 	if err := e.Login(t.Context(), def); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	sess := e.Session()
-	if sess.Jar != e.Jar {
-		t.Fatal("Session().Jar is not the executor's jar")
+	ok, err := e.CheckTest(t.Context(), def)
+	if err != nil || !ok {
+		t.Fatalf("CheckTest = (%v, %v), want (true, nil)", ok, err)
 	}
-	u, _ := url.Parse(baseURL)
-	if len(sess.Jar.Cookies(u)) == 0 {
-		t.Error("session jar has no cookies after manual-cookie login")
+
+	probe := rt.capture(3)
+	if !hasCookie(probe.cookies, "session", "fresh-postlogin") {
+		t.Errorf("probe missing the rotated session cookie; got %v", cookieNames(probe.cookies))
 	}
+	if n := countCookie(probe.cookies, "session"); n != 1 {
+		t.Errorf("probe carried %d 'session' pairs, want exactly 1 (no stale duplicate)", n)
+	}
+}
+
+// countCookie returns how many pairs named name the request carried.
+func countCookie(cs []*stdhttp.Cookie, name string) int {
+	n := 0
+	for _, c := range cs {
+		if c.Name == name {
+			n++
+		}
+	}
+	return n
 }
 
 // --- cookie helpers ---

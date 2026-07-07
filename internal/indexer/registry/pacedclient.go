@@ -135,6 +135,17 @@ type rateLimitInfo struct {
 // wait/sleep); the live base.Do runs on the inbound request context (with the client's
 // own timeout), so a slow 429/503 response never consumes the budget before pacing
 // starts. "request aborted" is reserved for a genuine caller cancel/deadline.
+// CookieJar reports the wrapped *http.Client's cookie jar (search.JarOwner), so
+// the engine seeds login cookies into the SAME jar the transport applies —
+// keeping a single jar on the wire. Nil when the base is not an *http.Client
+// (test fakes), meaning no jar is managed.
+func (d *pacedDoer) CookieJar() stdhttp.CookieJar {
+	if c, ok := d.base.(*stdhttp.Client); ok {
+		return c.Jar
+	}
+	return nil
+}
+
 func (d *pacedDoer) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
 	ctx := req.Context() // caller ctx: bounds base.Do + is the ONLY source of "request aborted"
 	lim := d.limiter(req.URL.Hostname())

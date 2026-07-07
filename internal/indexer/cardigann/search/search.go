@@ -40,9 +40,19 @@ var ErrParseError = errors.New("search: response parse error")
 
 // Doer is the narrow HTTP seam the executor drives, identical to login.Doer so a
 // single client/replay transport serves both stages. No live network call ever
-// happens in this package or its tests.
+// happens in this package or its tests. The Doer owns the ONE cookie jar (see
+// login.Doer's cookie contract); this package never writes Cookie headers.
 type Doer interface {
 	Do(*stdhttp.Request) (*stdhttp.Response, error)
+}
+
+// JarOwner is the optional Doer capability reporting the cookie jar the Doer
+// applies to outgoing requests. A wrapper around an *http.Client (the registry's
+// paced client) implements it so the engine can seed login cookies into the SAME
+// jar the transport uses — keeping exactly one jar on the wire. A bare
+// *http.Client needs no method: the engine reads its Jar field directly.
+type JarOwner interface {
+	CookieJar() stdhttp.CookieJar
 }
 
 // Deps are the wired pipeline stages the search executor reuses. The engine

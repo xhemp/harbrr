@@ -439,8 +439,9 @@ func renderHeaders(in map[string][]string, ctx *template.Context) (map[string][]
 }
 
 // newRequest builds the *http.Request for a builtRequest: context, optional form
-// body, rendered headers, then the session cookies + solver UA (applySession).
-// Shared by doRequest and doSearchRequest so both issue byte-identical requests.
+// body, rendered headers, then the session's solver UA (applySession); cookies
+// ride the Doer's jar. Shared by doRequest and doSearchRequest so both issue
+// byte-identical requests.
 func newRequest(ctx context.Context, br builtRequest, session *login.Session) (*stdhttp.Request, error) {
 	var bodyReader io.Reader
 	if br.body != "" {
@@ -474,8 +475,8 @@ func checkStatus(resp *stdhttp.Response, br builtRequest) error {
 	return fmt.Errorf("%s %s: tracker returned HTTP %d", br.method, apphttp.SchemeHost(br.url), resp.StatusCode)
 }
 
-// doRequest issues one builtRequest through the Doer, attaching the session
-// cookies and rendered headers, and reads the (capped) response body. Any
+// doRequest issues one builtRequest through the Doer, attaching the rendered
+// headers and session UA, and reads the (capped) response body. Any
 // non-2xx status fails fast (see checkStatus). Used by the download/grab flows,
 // whose requests keep the client's default redirect-following (Jackett's
 // download path always follows); search-path requests go through
@@ -565,25 +566,20 @@ func redirectTarget(resp *stdhttp.Response, reqURL string) string {
 // against a hostile/broken server streaming unbounded bytes.
 const maxSearchBodyBytes = 32 << 20 // 32 MiB
 
-// applySession attaches the session jar's cookies for the request URL, so the
-// offline replay transport (and a jar-less production Doer) sees authenticated
-// cookies on the wire. When the session carries an anti-bot solver User-Agent, it
-// is replayed too: a Cloudflare cf_clearance cookie in the jar is bound to that
-// UA, so the search must send it or the clearance is rejected and the tracker
-// returns the challenge/login page (a false logged-out). A definition's own
-// User-Agent header still wins.
+// applySession replays the session's anti-bot solver User-Agent: a Cloudflare
+// cf_clearance cookie in the client jar is bound to that UA, so the search must
+// send it or the clearance is rejected and the tracker returns the
+// challenge/login page (a false logged-out). A definition's own User-Agent
+// header still wins. Cookies are deliberately NOT touched here — the Doer's jar
+// is the single cookie authority (see login.Doer); adding jar cookies here as
+// well would duplicate every pair on the wire, and a stale-first duplicate after
+// a login-time session rotation presents the logged-out session forever.
 func applySession(req *stdhttp.Request, session *login.Session) {
 	if session == nil {
 		return
 	}
 	if session.UserAgent != "" && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", session.UserAgent)
-	}
-	if session.Jar == nil {
-		return
-	}
-	for _, c := range session.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
 	}
 }
 

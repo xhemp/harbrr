@@ -203,14 +203,38 @@ func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) sea
 
 // buildLogin constructs the login executor with the HTTP seam, base URL, and
 // config. Its selector engine is bound to the engine's template context by
-// login.New, independent of the per-row selector used in search.
+// login.New, independent of the per-row selector used in search. When the Doer
+// owns a cookie jar (production and the parity harness both drive an
+// *http.Client with one), that SAME jar is handed to the executor so login
+// seeding and the transport's cookie handling share a single jar — a second jar
+// would put duplicate (and, after a login-time session rotation, stale-first)
+// Cookie pairs on the wire.
 func buildLogin(o options) *login.Executor {
-	return login.New(
+	opts := []login.Option{
 		login.WithClient(o.doer),
 		login.WithBaseURL(o.baseURL),
 		login.WithConfig(o.config),
 		login.WithSolver(o.solver),
-	)
+	}
+	if jar := doerJar(o.doer); jar != nil {
+		opts = append(opts, login.WithJar(jar))
+	}
+	return login.New(opts...)
+}
+
+// doerJar returns the cookie jar the Doer applies to outgoing requests: an
+// *http.Client's own Jar, or the jar a wrapper reports via search.JarOwner
+// (the registry's paced client). Nil when the Doer manages no jar — then no
+// cookies flow on the wire, which only offline/parse-only Doers accept.
+func doerJar(d search.Doer) stdhttp.CookieJar {
+	switch c := d.(type) {
+	case *stdhttp.Client:
+		return c.Jar
+	case search.JarOwner:
+		return c.CookieJar()
+	default:
+		return nil
+	}
 }
 
 // firstLink returns the definition's first declared site link, the default base

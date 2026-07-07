@@ -6,7 +6,41 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 )
+
+// TestNewDoerExposesClientJar pins the single-jar wiring: the production doer
+// must report the *http.Client's OWN jar via CookieJar() (search.JarOwner), so
+// the engine seeds login cookies into the SAME jar the transport applies and
+// records on every hop. A second jar puts duplicate — and after a login-time
+// session rotation, stale-first — Cookie pairs on the wire, which a tracker
+// reads as the logged-out session.
+func TestNewDoerExposesClientJar(t *testing.T) {
+	t.Parallel()
+	d, err := newDoer(ClientParams{RateInterval: time.Millisecond})
+	if err != nil {
+		t.Fatalf("newDoer: %v", err)
+	}
+	jo, ok := d.(search.JarOwner)
+	if !ok {
+		t.Fatalf("newDoer returned %T, want a search.JarOwner", d)
+	}
+	pd, ok := d.(*pacedDoer)
+	if !ok {
+		t.Fatalf("newDoer returned %T, want *pacedDoer", d)
+	}
+	client, ok := pd.base.(*stdhttp.Client)
+	if !ok {
+		t.Fatalf("paced base is %T, want *http.Client", pd.base)
+	}
+	if client.Jar == nil {
+		t.Fatal("production client has no cookie jar")
+	}
+	if jo.CookieJar() != client.Jar {
+		t.Error("CookieJar() is not the http.Client's own jar")
+	}
+}
 
 // TestNewDoerNoProxyUsesDefaultTransport guards the typed-nil Transport panic:
 // buildTransport returns a nil *http.Transport for the common no-proxy case, and

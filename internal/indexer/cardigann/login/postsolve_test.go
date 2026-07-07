@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	stdhttp "net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"sync"
@@ -15,6 +16,9 @@ import (
 // postThenCleanDoer returns a Cloudflare challenge for the FIRST POST (the
 // pre-clearance submission) and the clean logged-in page for the retry, recording
 // the retry request's headers so the cf_clearance + UA replay can be asserted.
+// It is an http.RoundTripper so a real *http.Client (owning the shared jar, the
+// production shape) can wrap it — the solver seeds cf_clearance into that jar
+// and the client puts it on the retry's wire.
 type postThenCleanDoer struct {
 	mu            sync.Mutex
 	posts         int
@@ -22,7 +26,7 @@ type postThenCleanDoer struct {
 	retryHadCFCkz bool
 }
 
-func (d *postThenCleanDoer) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
+func (d *postThenCleanDoer) RoundTrip(req *stdhttp.Request) (*stdhttp.Response, error) {
 	d.mu.Lock()
 	d.posts++
 	first := d.posts == 1
@@ -66,7 +70,12 @@ func TestPostForm_ChallengedLoginGetSolvesThenRetries(t *testing.T) {
 	t.Parallel()
 	doer := &postThenCleanDoer{}
 	solver := &solveURLSolver{}
-	e := New(WithClient(doer), WithBaseURL("https://t.invalid/"), WithSolver(solver))
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &stdhttp.Client{Transport: doer, Jar: jar}
+	e := New(WithClient(client), WithJar(jar), WithBaseURL("https://t.invalid/"), WithSolver(solver))
 	def := &loader.Definition{Login: &loader.Login{Path: "index.php?page=login", Method: "post"}}
 
 	if err := e.postForm(context.Background(), def, "index.php?page=login",

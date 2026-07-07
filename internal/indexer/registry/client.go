@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"golang.org/x/net/proxy"
+	"golang.org/x/net/publicsuffix"
 
 	apphttp "github.com/autobrr/harbrr/internal/http"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
@@ -23,7 +24,9 @@ const defaultHTTPTimeout = 60 * time.Second
 // a per-instance cookie jar (so a login response's Set-Cookie carries into the
 // search request) and a per-instance timeout, wrapped in a paced client that
 // enforces per-host rate limits + bounded 429/503 backoff. Each engine gets its
-// own jar, so instances never share session cookies. It is the production
+// own jar, so instances never share session cookies; the paced client exposes it
+// via CookieJar() (search.JarOwner) so the engine seeds login cookies into this
+// SAME jar — the single cookie authority on the wire. It is the production
 // doerFactory — tests inject a replay Doer instead.
 //
 // Secret redaction is enforced at the logging chokepoints — the engine redacts
@@ -31,7 +34,9 @@ const defaultHTTPTimeout = 60 * time.Second
 // the server's request logger redacts query params — so the transport itself does
 // no logging and needs no wrapper.
 func newDoer(p ClientParams) (search.Doer, error) {
-	jar, err := cookiejar.New(nil)
+	// The publicsuffix list gives correct cross-subdomain cookie scoping (a def's
+	// login can redirect between subdomains), matching login.New's fallback jar.
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
 		return nil, fmt.Errorf("registry: new cookie jar: %w", err)
 	}
