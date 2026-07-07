@@ -69,14 +69,57 @@ func filterToUpper(value string, _ []string) (string, error) {
 	return strings.ToUpper(value), nil
 }
 
-// filterURLDecode implements urldecode via net/url query unescaping, matching
-// Jackett's WebUtilityHelpers.UrlDecode (which treats '+' as a space).
+// filterURLDecode implements urldecode, matching Jackett's
+// WebUtilityHelpers.UrlDecode (.NET WebUtility.UrlDecode). Unlike Go's
+// url.QueryUnescape, .NET never throws: invalid or incomplete percent escapes
+// stay literal. Values reaching this filter are often already-decoded titles
+// (e.g. querystring then urldecode chains), where a bare '%' in a release name
+// would otherwise error and drop the whole row.
 func filterURLDecode(value string, _ []string) (string, error) {
-	out, err := url.QueryUnescape(value)
-	if err != nil {
-		return "", fmt.Errorf("urldecode: %w", err)
+	return webUtilityURLDecode(value), nil
+}
+
+// webUtilityURLDecode mirrors .NET System.Net.WebUtility.UrlDecode: '+'
+// becomes a space, a valid %XX escape (case-insensitive hex) decodes to its
+// byte, and anything malformed — a trailing '%', or '%' not followed by two
+// hex digits — is emitted verbatim. Decoded bytes are collected first and the
+// buffer interpreted as UTF-8, so multi-byte escapes like %E2%80%A6 reassemble
+// into a single rune.
+func webUtilityURLDecode(s string) string {
+	buf := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '+':
+			buf = append(buf, ' ')
+		case c == '%' && i+2 < len(s):
+			hi, okHi := unhex(s[i+1])
+			lo, okLo := unhex(s[i+2])
+			if okHi && okLo {
+				buf = append(buf, hi<<4|lo)
+				i += 2
+				continue
+			}
+			buf = append(buf, c)
+		default:
+			buf = append(buf, c)
+		}
 	}
-	return out, nil
+	return string(buf)
+}
+
+// unhex returns the value of a hex digit byte and whether c is one.
+func unhex(c byte) (byte, bool) {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0', true
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, true
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, true
+	default:
+		return 0, false
+	}
 }
 
 // filterURLEncode implements the urlencode filter. Jackett applies
