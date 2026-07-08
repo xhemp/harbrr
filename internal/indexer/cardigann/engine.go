@@ -136,7 +136,10 @@ func NewEngine(def *loader.Definition, opts ...Option) (*Engine, error) {
 		return nil, fmt.Errorf("cardigann: building capabilities for %q: %w", def.ID, err)
 	}
 
-	deps := buildDeps(def, caps, o)
+	deps, err := buildDeps(def, caps, o)
+	if err != nil {
+		return nil, fmt.Errorf("cardigann: %w", err)
+	}
 
 	return &Engine{
 		def:     def,
@@ -175,7 +178,7 @@ func resolveOptions(def *loader.Definition, opts []Option) options {
 // carries the base URL, def type, and category map. The selector is NOT wired
 // here — ParseResults installs a fresh one per call so concurrent searches on a
 // reused Engine never share its mutable EvalTemplate.
-func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) search.Deps {
+func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) (search.Deps, error) {
 	parser := dateparse.New(
 		dateparse.WithLanguage(def.Language),
 		dateparse.WithClock(o.clock),
@@ -192,13 +195,22 @@ func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) sea
 		normalizer.WithCategoryMap(caps.CategoryMap),
 	)
 
+	// Resolve the def's declared charset once. A non-UTF-8 def with an
+	// unresolvable encoding fails loud here rather than silently emitting mojibake
+	// titles and mis-encoded searches.
+	enc, err := search.ResolveEncoding(def.Encoding)
+	if err != nil {
+		return search.Deps{}, fmt.Errorf("resolving encoding for %q: %w", def.ID, err)
+	}
+
 	return search.Deps{
 		Filters:    registry,
 		Normalizer: norm,
 		Config:     o.config,
 		BaseURL:    o.baseURL,
 		Clock:      o.clock,
-	}
+		Encoding:   enc,
+	}, nil
 }
 
 // buildLogin constructs the login executor with the HTTP seam, base URL, and

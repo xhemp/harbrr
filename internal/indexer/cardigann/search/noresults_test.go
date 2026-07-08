@@ -55,8 +55,7 @@ func TestNoResultsMatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			br := builtRequest{respType: tt.respType, noResultsMessage: tt.message}
-			sr := searchResponse{status: tt.status, body: []byte(tt.body)}
-			if got := noResultsMatch(br, sr); got != tt.want {
+			if got := noResultsMatch(br, tt.status, []byte(tt.body)); got != tt.want {
 				t.Errorf("noResultsMatch = %v, want %v", got, tt.want)
 			}
 		})

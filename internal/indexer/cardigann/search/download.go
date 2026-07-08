@@ -158,6 +158,10 @@ func fetchBefore(ctx context.Context, dl *loader.DownloadBlock, link string, du 
 	if err != nil {
 		return nil, err
 	}
+	// Codepage-encode the before-request query/body values (Jackett encodes this
+	// requestBlock with the indexer Encoding, as it does search inputs). No-op for
+	// UTF-8/no-encoding defs.
+	pairs = codepageEncodePairs(deps.Encoding, pairs)
 	br, err := buildBeforeRequest(before, absURL, pairs, headers)
 	if err != nil {
 		return nil, err

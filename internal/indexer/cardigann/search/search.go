@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/encoding"
+
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
@@ -80,6 +82,11 @@ type Deps struct {
 	// ({{ .Today.Year }} et al). The engine injects a deterministic clock in
 	// tests; nil falls back to time.Now so .Today is never silently empty.
 	Clock func() time.Time
+	// Encoding is the definition's declared charset transcoder (ResolveEncoding),
+	// nil for UTF-8/no-encoding defs. When set, response bodies are decoded to
+	// UTF-8 before parsing and request query/body values are codepage-encoded,
+	// reproducing Jackett's Encoding.GetEncoding(Definition.Encoding).
+	Encoding encoding.Encoding
 }
 
 // ParseResults is the offline extraction half: it parses body per respType
@@ -103,6 +110,12 @@ func ParseResults(def *loader.Definition, body []byte, respType string, query Qu
 	if err != nil {
 		return nil, err
 	}
+
+	// Decode a non-UTF-8 body to UTF-8 before parsing (Jackett WebResult.ContentString
+	// with the def Encoding). This is the shared offline core, so both the live search
+	// (Execute passes the raw body) and offline replay (Engine.ParseResponseQuery) get
+	// correct UTF-8 selection. A UTF-8/no-encoding def is a no-op.
+	body = decodeBody(deps.Encoding, body)
 
 	doc, err := parseDocument(deps.Selector, body, respType)
 	if err != nil {
@@ -210,17 +223,22 @@ func Execute(ctx context.Context, def *loader.Definition, query Query, session *
 		// SearchPath.Response per request); a mixed HTML+JSON def must never parse
 		// one path's body with another path's type.
 		respType := reqs[i].respType
+		// The logged-out and no-results checks run against Jackett's ContentString
+		// (the decoded body), so decode here too for a non-UTF-8 def. ParseResults
+		// decodes the raw body itself, so it receives the raw sr.body below — never
+		// a double-transcode (both decodes read the same raw source). No-op for UTF-8.
+		decoded := decodeBody(deps.Encoding, body)
 		// Lazy login: a logged-out response (login.test selector absent) aborts the
 		// parse so the engine can re-login and retry once. Checked before parsing,
 		// matching Jackett's CheckIfLoginIsNeeded -> DoLogin order.
-		if looksLoggedOut(def, body, respType, query, deps) {
+		if looksLoggedOut(def, decoded, respType, query, deps) {
 			return nil, ErrSearchLoggedOut
 		}
 		// A JSON path's noResultsMessage short-circuits row parsing: Jackett checks
 		// the raw body against it before JToken.Parse and `continue`s its SearchPath
 		// loop, so a matching body is a graceful empty page — never a parse error —
 		// while any remaining paths still run.
-		if noResultsMatch(reqs[i], sr) {
+		if noResultsMatch(reqs[i], sr.status, decoded) {
 			continue
 		}
 		rels, err := ParseResults(def, body, respType, query, deps)
@@ -242,13 +260,14 @@ func Execute(ctx context.Context, def *loader.Definition, query Query, session *
 // digitalcore-api) matches an exactly-empty body, which several JSON APIs
 // return for a zero-result query and which would otherwise EOF the JSON parse.
 // A nil message (def doesn't declare one) never matches, so genuine parse
-// errors still surface.
-func noResultsMatch(br builtRequest, sr searchResponse) bool {
-	if br.respType != responseTypeJSON || br.noResultsMessage == nil || sr.status != stdhttp.StatusOK {
+// errors still surface. body is the decoded (UTF-8) response, matching Jackett's
+// ContentString substring check.
+func noResultsMatch(br builtRequest, status int, body []byte) bool {
+	if br.respType != responseTypeJSON || br.noResultsMessage == nil || status != stdhttp.StatusOK {
 		return false
 	}
 	if msg := *br.noResultsMessage; msg != "" {
-		return strings.Contains(string(sr.body), msg)
+		return strings.Contains(string(body), msg)
 	}
-	return len(sr.body) == 0
+	return len(body) == 0
 }

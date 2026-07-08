@@ -153,6 +153,12 @@ func buildOneRequest(def *loader.Definition, path loader.SearchPathBlock, query 
 	if err != nil {
 		return builtRequest{}, err
 	}
+	// Codepage-encode the GET query / POST body values in the def's charset
+	// (Jackett GetQueryString(Encoding) / FormUrlEncodedContentWithEncoding). The
+	// path template above stays UTF-8 (requestPathContext), matching Jackett's
+	// asymmetry: only input pairs are codepage-encoded, never path-substituted
+	// values. No-op for UTF-8/no-encoding defs.
+	pairs = codepageEncodePairs(deps.Encoding, pairs)
 
 	headers, err := renderHeaders(def.Search.Headers, requestContext(query, deps))
 	if err != nil {
