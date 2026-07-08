@@ -63,6 +63,8 @@ func setDefaults(v *viper.Viper) {
 	// (viper only binds env for known keys). The list-valued auth.ip_allowlist /
 	// auth.trusted_proxies are set via the config file.
 	v.SetDefault("server.secure_cookie", d.Server.SecureCookie)
+	v.SetDefault("secrets.encryption_key", d.Secrets.EncryptionKey)
+	v.SetDefault("secrets.key_file", d.Secrets.KeyFile)
 	v.SetDefault("secrets.allow_plaintext", d.Secrets.AllowPlaintext)
 	v.SetDefault("cache.enabled", d.Cache.Enabled)
 	v.SetDefault("cache.rss_ttl", d.Cache.RSSTTL)
