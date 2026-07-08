@@ -40,6 +40,10 @@ function Picker({ conn, pending, onSave }: {
   const status = useConnectionStatus(conn.id)
   const [staged, setStaged] = useState<Set<number> | null>(null)
 
+  // Until the current selection has successfully loaded, there is no safe base to
+  // stage from — a click or Save here would full-replace the connection's real
+  // selection with an empty (or single-item) set. Checkboxes and Save stay
+  // disabled until status.isSuccess.
   const selected = staged ?? new Set(
     (status.data?.indexers ?? []).filter((r) => r.selected).map((r) => r.instanceId))
 
@@ -55,6 +59,7 @@ function Picker({ conn, pending, onSave }: {
             <Checkbox
               id={`sel-${ix.id}`}
               checked={selected.has(ix.id)}
+              disabled={!status.isSuccess}
               onCheckedChange={(checked) => {
                 const next = new Set(selected)
                 if (checked === true) next.add(ix.id)
@@ -67,7 +72,7 @@ function Picker({ conn, pending, onSave }: {
         ))}
       </div>
       <DialogFooter>
-        <Button disabled={pending || status.isLoading} onClick={() => onSave(conn.id, [...selected])}>
+        <Button disabled={pending || !status.isSuccess} onClick={() => onSave(conn.id, [...selected])}>
           {pending ? "Saving…" : "Save selection"}
         </Button>
       </DialogFooter>
