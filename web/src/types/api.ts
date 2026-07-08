@@ -117,12 +117,19 @@ export type IndexerStatus = {
   events: HealthEvent[]
 }
 
+export type IndexerFailureCounts = {
+  authFailure: number
+  rateLimited: number
+  parseError: number
+  antiBot: number
+}
+
 export type IndexerStats = {
   slug: string
   queries: number
   grabs: number
   avgResponseMs?: number
-  failures?: number
+  failures: IndexerFailureCounts
   lastQueryAt?: string
   lastFailureAt?: string
 }

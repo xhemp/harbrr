@@ -1,7 +1,13 @@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useIndexerCapabilities, useIndexerStats, useIndexerStatuses } from "@/hooks/useIndexers"
 import { relativeTime } from "@/lib/format"
-import type { Capabilities } from "@/types/api"
+import type { Capabilities, IndexerFailureCounts } from "@/types/api"
+
+// Sums the per-kind failure tally into the single count the details sheet displays.
+function totalFailures(failures: IndexerFailureCounts | undefined): number {
+  if (!failures) return 0
+  return failures.authFailure + failures.rateLimited + failures.parseError + failures.antiBot
+}
 
 // Right-hand drawer: recent health events, durable stats, and capabilities.
 export function IndexerDetailsSheet({ slug, onClose }: { slug: string | null, onClose: () => void }) {
@@ -36,7 +42,7 @@ function Details({ slug }: { slug: string }) {
             <dt className="text-muted-foreground">Avg response</dt>
             <dd>{stats.data?.avgResponseMs !== undefined ? `${stats.data.avgResponseMs} ms` : "—"}</dd>
             <dt className="text-muted-foreground">Failures</dt>
-            <dd>{stats.data?.failures ?? 0}</dd>
+            <dd>{totalFailures(stats.data?.failures)}</dd>
             <dt className="text-muted-foreground">Last query</dt>
             <dd>{stats.data?.lastQueryAt ? relativeTime(stats.data.lastQueryAt) : "never"}</dd>
           </dl>
