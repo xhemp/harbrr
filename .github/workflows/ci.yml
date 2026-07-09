@@ -55,14 +55,16 @@ jobs:
     name: backend-test (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
     # Match the Dockerfile's build stage (golang:1.26-alpine) so the toolchain that
-    # lints/tests/builds is the same one that ships. GitHub Actions injects its own
+    # tests is the image's own musl Go — hence no actions/setup-go here (it would
+    # download a glibc Go and shadow the image's on PATH, silently defeating the
+    # point) and GOTOOLCHAIN=local (so a go.mod toolchain bump fails loud instead of
+    # fetching a glibc Go behind our back). GitHub Actions injects its own
     # glibc-linked Node runtime into container jobs to run JS-based actions
-    # (checkout, setup-go, ...); a bare Alpine container is musl-only and that Node
-    # binary fails immediately ("no such file or directory") on the first action
-    # step. `gcompat` shims the missing glibc symbols — it must be installed before
-    # any other step, including actions/checkout. `build-base` (gcc + musl-dev) is
-    # required here — unlike the Dockerfile's CGO_ENABLED=0 product build, `go test
-    # -race` always needs cgo, so this job needs a real C toolchain.
+    # (checkout, cache); a bare Alpine container is musl-only and that Node binary
+    # fails immediately on the first action step — `gcompat` shims the missing glibc
+    # symbols and must be installed before any other step. `build-base` (gcc +
+    # musl-dev) is required because `go test -race` always needs cgo, unlike the
+    # Dockerfile's CGO_ENABLED=0 product build.
     container:
       image: golang:1.26-alpine
     timeout-minutes: 15
@@ -78,14 +80,28 @@ jobs:
             packages: $(go list ./... | grep -Ev '/internal/indexer/cardigann(/|$)|/internal/(appsync|auth|database)(/|$)|/internal/indexer/registry(/|$)|/internal/web/api(/|$)')
     env:
       CGO_ENABLED: "1"
+      GOTOOLCHAIN: local
+      # In a container job the workspace bind-mount is owned by the host runner's
+      # uid, not the step's user, so git refuses it (safe.directory) and go's VCS
+      # stamping dies with exit 128 on every go list/test of a main package. Tests
+      # and package listings don't need VCS stamps — disable them outright.
+      GOFLAGS: -buildvcs=false
+      # Owned by the non-root `ci` user the tests run as (see the test step).
+      GOMODCACHE: /home/ci/go/pkg/mod
+      GOCACHE: /home/ci/.cache/go-build
     steps:
       - name: install container prerequisites (gcompat for GHA's Node runtime, git for checkout/go mod, build-base for -race's cgo requirement, ruby for the shard-coverage guard)
-        run: apk add --no-cache gcompat git build-base ruby
+        run: |
+          apk add --no-cache gcompat git build-base ruby
+          adduser -D ci
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+          path: |
+            /home/ci/go/pkg/mod
+            /home/ci/.cache/go-build
+          key: alpine-go-${{ hashFiles('go.sum') }}
+          restore-keys: alpine-go-
       - name: guard shard package coverage
         if: matrix.shard.name == 'rest'
         run: |
@@ -97,8 +113,23 @@ jobs:
             sort -u > /tmp/backend-shard-packages.txt
           go list ./... | sort -u > /tmp/backend-all-packages.txt
           diff -u /tmp/backend-all-packages.txt /tmp/backend-shard-packages.txt
-      - name: test (race)
-        run: go test -race -count=1 ${{ matrix.shard.packages }}
+      # Run as a non-root user: container jobs default to root, and root bypasses
+      # file permissions — internal/secrets' fail-closed keyring test (unreadable
+      # key_file must be fatal, never a plaintext fallback) t.Skips as root, which
+      # would silently drop the suite's security coverage. The command goes through
+      # a script file so the rest shard's $(go list ...) packages expression expands
+      # in the ci user's shell with ci's Go env (busybox su also resets PATH/HOME,
+      # so PATH is handed through explicitly).
+      - name: test (race, non-root)
+        run: |
+          chown -R ci: /home/ci
+          cat > /tmp/shard-test.sh <<'SCRIPT'
+          set -eu
+          export HOME=/home/ci CGO_ENABLED=1 GOTOOLCHAIN=local GOFLAGS=-buildvcs=false GOMODCACHE=/home/ci/go/pkg/mod GOCACHE=/home/ci/.cache/go-build
+          cd "$1"
+          go test -race -count=1 ${{ matrix.shard.packages }}
+          SCRIPT
+          su ci -s /bin/sh -c "PATH='$PATH' /bin/sh /tmp/shard-test.sh '$PWD'"
 
   # Frontend Vitest suite — mirrors the Go `test` job and gates docker-merge alongside it.
   web-test:
@@ -221,24 +252,19 @@ jobs:
   golangci-lint:
     name: golangci-lint
     runs-on: ubuntu-latest
-    # Match the Dockerfile's build stage (golang:1.26-alpine) so the toolchain that
-    # lints/tests/builds is the same one that ships. GitHub Actions injects its own
-    # glibc-linked Node runtime into container jobs to run JS-based actions
-    # (checkout, setup-go, golangci-lint-action, ...); a bare Alpine container is
-    # musl-only and that Node binary fails immediately ("no such file or directory")
-    # on the first action step. `gcompat` shims the missing glibc symbols — it must
-    # be installed before any other step, including actions/checkout.
+    # Alpine container matching the Dockerfile's build stage, lint run by the
+    # image's own Go — see backend-test above for the full gcompat / no-setup-go /
+    # GOTOOLCHAIN=local rationale. No non-root user here: linting has no
+    # permission-gated tests, and golangci-lint-action manages its own cache.
     container:
       image: golang:1.26-alpine
     timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
     steps:
       - name: install container prerequisites (gcompat for GHA's Node runtime, git for checkout/go mod)
         run: apk add --no-cache gcompat git
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
