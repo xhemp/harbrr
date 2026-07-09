@@ -54,6 +54,17 @@ jobs:
   backend-test:
     name: backend-test (${{ matrix.shard.name }})
     runs-on: ubuntu-latest
+    # Match the Dockerfile's build stage (golang:1.26-alpine) so the toolchain that
+    # lints/tests/builds is the same one that ships. GitHub Actions injects its own
+    # glibc-linked Node runtime into container jobs to run JS-based actions
+    # (checkout, setup-go, ...); a bare Alpine container is musl-only and that Node
+    # binary fails immediately ("no such file or directory") on the first action
+    # step. `gcompat` shims the missing glibc symbols — it must be installed before
+    # any other step, including actions/checkout. `build-base` (gcc + musl-dev) is
+    # required here — unlike the Dockerfile's CGO_ENABLED=0 product build, `go test
+    # -race` always needs cgo, so this job needs a real C toolchain.
+    container:
+      image: golang:1.26-alpine
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -65,7 +76,11 @@ jobs:
             packages: ./internal/appsync/... ./internal/auth/... ./internal/database/... ./internal/indexer/registry/... ./internal/web/api/...
           - name: rest
             packages: $(go list ./... | grep -Ev '/internal/indexer/cardigann(/|$)|/internal/(appsync|auth|database)(/|$)|/internal/indexer/registry(/|$)|/internal/web/api(/|$)')
+    env:
+      CGO_ENABLED: "1"
     steps:
+      - name: install container prerequisites (gcompat for GHA's Node runtime, git for checkout/go mod, build-base for -race's cgo requirement, ruby for the shard-coverage guard)
+        run: apk add --no-cache gcompat git build-base ruby
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -206,8 +221,19 @@ jobs:
   golangci-lint:
     name: golangci-lint
     runs-on: ubuntu-latest
+    # Match the Dockerfile's build stage (golang:1.26-alpine) so the toolchain that
+    # lints/tests/builds is the same one that ships. GitHub Actions injects its own
+    # glibc-linked Node runtime into container jobs to run JS-based actions
+    # (checkout, setup-go, golangci-lint-action, ...); a bare Alpine container is
+    # musl-only and that Node binary fails immediately ("no such file or directory")
+    # on the first action step. `gcompat` shims the missing glibc symbols — it must
+    # be installed before any other step, including actions/checkout.
+    container:
+      image: golang:1.26-alpine
     timeout-minutes: 10
     steps:
+      - name: install container prerequisites (gcompat for GHA's Node runtime, git for checkout/go mod)
+        run: apk add --no-cache gcompat git
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
