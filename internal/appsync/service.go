@@ -113,10 +113,6 @@ func (s *Service) CreateConnection(ctx context.Context, p CreateConnectionParams
 	if err := validateCreate(&p); err != nil {
 		return domain.AppConnection{}, err
 	}
-	if err := s.validateProfileRef(ctx, s.db, p.Kind, p.SyncProfileID); err != nil {
-		return domain.AppConnection{}, err
-	}
-
 	plaintext, key, err := s.minter.MintAPIKey(ctx, "app-sync: "+p.Name)
 	if err != nil {
 		return domain.AppConnection{}, fmt.Errorf("appsync: mint connection key: %w", err)
@@ -143,6 +139,13 @@ func (s *Service) insertConnection(ctx context.Context, p CreateConnectionParams
 		return domain.AppConnection{}, fmt.Errorf("appsync: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Validate the profile ref against this same transaction (not the bare s.db
+	// handle), so a concurrent profile delete or category-narrow can't slip between
+	// the check and the insert below (the UpdateConnection precedent).
+	if err := s.validateProfileRef(ctx, tx, p.Kind, p.SyncProfileID); err != nil {
+		return domain.AppConnection{}, err
+	}
 
 	now := s.clock()
 	conn := domain.AppConnection{
