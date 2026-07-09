@@ -21,3 +21,46 @@ export function getApiBaseUrl(): string {
 export function defaultHarbrrUrl(): string {
   return `${window.location.origin}${getBaseUrl()}`
 }
+
+// urlPort returns a URL's effective port — its explicit port, or the
+// scheme's default (443 for https, 80 for anything else) when none is
+// given — or null when the string doesn't parse as a URL.
+export function urlPort(url: string): number | null {
+  try {
+    const parsed = new URL(url)
+    if (parsed.port !== "") return Number(parsed.port)
+    return parsed.protocol === "https:" ? 443 : 80
+  } catch {
+    return null
+  }
+}
+
+// urlHasExplicitPort reports whether url's authority names a port outright,
+// as opposed to relying on the scheme's default. A harbrrUrl fronted by a
+// reverse proxy (docs/security.md's supported deployment) is typically
+// written without one — TLS terminates on the proxy's standard 443/80 and
+// that number has no relationship to harbrr's own internal listen port.
+// Callers that compare a stored port against harbrr's live listen port
+// (ConnectionCard's stale-port check) must skip URLs without an explicit
+// port: the comparison is only meaningful when the URL targets harbrr's
+// listener directly. Returns false when the string doesn't parse as a URL.
+export function urlHasExplicitPort(url: string): boolean {
+  try {
+    return new URL(url).port !== ""
+  } catch {
+    return false
+  }
+}
+
+// withPort returns url with only its port replaced, leaving scheme, host,
+// and path untouched (setting the scheme's default port drops it entirely,
+// per standard URL semantics). Returns url unchanged when it doesn't parse.
+export function withPort(url: string, port: number): string {
+  try {
+    const parsed = new URL(url)
+    parsed.port = String(port)
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}

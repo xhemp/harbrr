@@ -129,6 +129,7 @@ func serve(ctx context.Context, cfg *config.Config, log zerolog.Logger) error {
 		DLToken: keyring, BasePath: cfg.Server.BaseURL, Cache: searchCache, Logger: log, LogLevel: logLevel,
 	}, api.Config{
 		AuthDisabled: cfg.Auth.AuthDisabled(), IPAllowlist: cfg.Auth.IPAllowlist, TrustedProxies: cfg.Auth.TrustedProxies,
+		Port: cfg.Server.Port,
 	})
 	if err != nil {
 		return fmt.Errorf("management api: %w", err)

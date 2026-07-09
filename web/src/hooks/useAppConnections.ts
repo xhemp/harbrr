@@ -17,6 +17,15 @@ export function useAppConnections() {
   })
 }
 
+// useServerInfo reflects harbrr's live listen port, used to flag app-sync
+// connections whose stored harbrrUrl port has drifted stale.
+export function useServerInfo() {
+  return useQuery({
+    queryKey: ["server-info"],
+    queryFn: () => api.getServerInfo(),
+  })
+}
+
 export function useConnectionStatus(id: number | null) {
   return useQuery({
     queryKey: ["app-connections", id, "status"],
@@ -42,6 +51,19 @@ export function useUpdateConnection(id: number) {
   const invalidate = useInvalidateConnections()
   return useMutation({
     mutationFn: (body: UpdateConnection) => api.updateConnection(id, body),
+    onSettled: invalidate,
+  })
+}
+
+// useUpdateConnectionById is useUpdateConnection's un-bound sibling: the id
+// travels with each mutate() call instead of being fixed at hook-creation
+// time, mirroring useSetConnectionEnabled — needed for actions (like the
+// stale-port fix) that apply to whichever connection a list row belongs to,
+// not a single dialog-scoped id.
+export function useUpdateConnectionById() {
+  const invalidate = useInvalidateConnections()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number, body: UpdateConnection }) => api.updateConnection(id, body),
     onSettled: invalidate,
   })
 }

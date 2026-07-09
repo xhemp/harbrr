@@ -27,7 +27,8 @@ import {
   useSyncAll,
   useSyncConnection,
   useTestConnection,
-  useUpdateConnection
+  useUpdateConnection,
+  useUpdateConnectionById
 } from "@/hooks/useAppConnections"
 import type { AppConnection, ConnectionSyncResult, SyncReport } from "@/types/api"
 
@@ -42,6 +43,7 @@ function ApplicationsPage() {
   const sync = useSyncConnection()
   const syncAll = useSyncAll()
   const remove = useDeleteConnection()
+  const fixPort = useUpdateConnectionById()
 
   const [dialog, setDialog] = useState<ConnectionDialogState>({ open: false })
   const [statusFor, setStatusFor] = useState<number | null>(null)
@@ -107,6 +109,13 @@ function ApplicationsPage() {
                 }),
                 onStatus: setStatusFor,
                 onSelectIndexers: setSelectFor,
+                onFixPort: (id, harbrrUrl) => fixPort.mutate({ id, body: { harbrrUrl } }, {
+                  onSuccess: () => sync.mutate(id, {
+                    onSuccess: (rep) => setReport({ title: connections.data?.find((c) => c.id === id)?.name ?? "", report: rep }),
+                    onError: () => toast.error("Sync failed"),
+                  }),
+                  onError: () => toast.error("Updating the connection's harbrr URL failed"),
+                }),
               }}
             />
           ))}
