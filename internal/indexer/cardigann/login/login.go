@@ -157,21 +157,20 @@ func (e *Executor) resolvePath(raw string) (string, error) {
 	return base.ResolveReference(ref).String(), nil
 }
 
-// get issues a GET, returning the (capped) body and final status. The cookie jar
-// is applied/updated by the production Doer; tests assert on the recorded
-// request. All error sites redact the URL.
+// get issues a GET, returning the (capped) body and final status. Cookies are
+// applied/recorded by the Doer's jar (see the Doer cookie contract); tests
+// assert on the recorded request. All error sites redact the URL.
 func (e *Executor) get(ctx context.Context, rawURL string, headers map[string][]string) (body []byte, status int, err error) {
 	return e.do(ctx, stdhttp.MethodGet, rawURL, nil, headers)
 }
 
-// do performs one request through the seam and reads the body. It applies jar
-// cookies on the way out and stores Set-Cookie on the way back when the Doer
-// does not own a jar (the replay transport in tests), so cookie capture is
-// exercised offline. In production the *http.Client owns its own jar, so this
-// store re-records cookies the Doer already persisted — redundant, not a
-// correctness guarantee (both jars then hold the session cookie; the request only
-// carries this Executor's jar via applyJar, so there is no double-cookie on the
-// wire).
+// do performs one request through the seam and reads the body. It deliberately
+// touches NO cookies: the Doer's jar is the single cookie authority — it applies
+// jar cookies to every hop and records Set-Cookie from every hop, including a
+// session rotation on a login POST's followed 302 (which this method never sees;
+// only the final response comes back). Writing a Cookie header here as well
+// would put a second, possibly stale pair on the wire — trackers (PHP) read the
+// FIRST pair, so a stale-first duplicate presents the logged-out session forever.
 func (e *Executor) do(ctx context.Context, method, rawURL string, bodyReader io.Reader, headers map[string][]string) ([]byte, int, error) {
 	req, err := stdhttp.NewRequestWithContext(ctx, method, rawURL, bodyReader)
 	if err != nil {
@@ -193,15 +192,12 @@ func (e *Executor) do(ctx context.Context, method, rawURL string, bodyReader io.
 	if ua := e.solverUA(); ua != "" && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", ua)
 	}
-	e.applyJar(req)
 
 	resp, err := e.Client.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s %s: %w", method, apphttp.SchemeHost(rawURL), apphttp.RedactURLError(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	e.storeJar(req.URL, resp)
 
 	reader, err := decompressBody(resp)
 	if err != nil {
@@ -253,29 +249,6 @@ func looksZlibWrapped(r *bufio.Reader) bool {
 		return false
 	}
 	return b[0]&0x0f == 8 && (uint16(b[0])<<8|uint16(b[1]))%31 == 0
-}
-
-// applyJar attaches the jar's cookies for the request URL onto the outgoing
-// request. Production *http.Client does this itself; doing it here too makes the
-// offline replay transport see authenticated cookies on the wire.
-func (e *Executor) applyJar(req *stdhttp.Request) {
-	if e.Jar == nil {
-		return
-	}
-	for _, c := range e.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
-	}
-}
-
-// storeJar records any Set-Cookie from the response into the jar, scoped to the
-// request URL, so cookies persist across the login round-trip and into search.
-func (e *Executor) storeJar(reqURL *url.URL, resp *stdhttp.Response) {
-	if e.Jar == nil {
-		return
-	}
-	if cs := resp.Cookies(); len(cs) > 0 {
-		e.Jar.SetCookies(reqURL, cs)
-	}
 }
 
 // cloudflareMarkers are byte signatures of a Cloudflare (or similar) anti-bot

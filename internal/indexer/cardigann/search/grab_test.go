@@ -47,7 +47,8 @@ func TestGrab_NoDownloadBlock_AppliesSearchHeader(t *testing.T) {
 
 // TestGrab_NoDownloadBlock_AppliesSessionCookie covers a session-cookie tracker
 // (the TorrentLeech shape): no download block, no token in the URL — the download
-// authenticates by the login session cookie, which applySession attaches.
+// authenticates by the login session cookie, which rides the client's jar (the
+// single cookie authority; the engine seeds login cookies into that same jar).
 func TestGrab_NoDownloadBlock_AppliesSessionCookie(t *testing.T) {
 	t.Parallel()
 	const link = "https://dl.test/download/241785226/Release.torrent"
@@ -63,13 +64,13 @@ func TestGrab_NoDownloadBlock_AppliesSessionCookie(t *testing.T) {
 		Name: "tlsession", Value: "logged-in-cookie",
 		Secure: true, HttpOnly: true, SameSite: stdhttp.SameSiteStrictMode,
 	}})
-	session := &login.Session{Jar: jar}
 
 	doer := &scriptedDoer{t: t, handlers: map[string]scriptResp{
 		"GET " + link: {body: torrentBody},
 	}}
+	client := &stdhttp.Client{Transport: doer, Jar: jar}
 
-	res, err := Grab(context.Background(), &loader.Definition{}, link, session, doer, downloadTestDeps())
+	res, err := Grab(context.Background(), &loader.Definition{}, link, &login.Session{}, client, downloadTestDeps())
 	if err != nil {
 		t.Fatalf("Grab: %v", err)
 	}

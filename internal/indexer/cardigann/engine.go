@@ -136,7 +136,10 @@ func NewEngine(def *loader.Definition, opts ...Option) (*Engine, error) {
 		return nil, fmt.Errorf("cardigann: building capabilities for %q: %w", def.ID, err)
 	}
 
-	deps := buildDeps(def, caps, o)
+	deps, err := buildDeps(def, caps, o)
+	if err != nil {
+		return nil, fmt.Errorf("cardigann: %w", err)
+	}
 
 	return &Engine{
 		def:     def,
@@ -175,7 +178,7 @@ func resolveOptions(def *loader.Definition, opts []Option) options {
 // carries the base URL, def type, and category map. The selector is NOT wired
 // here — ParseResults installs a fresh one per call so concurrent searches on a
 // reused Engine never share its mutable EvalTemplate.
-func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) search.Deps {
+func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) (search.Deps, error) {
 	parser := dateparse.New(
 		dateparse.WithLanguage(def.Language),
 		dateparse.WithClock(o.clock),
@@ -192,25 +195,58 @@ func buildDeps(def *loader.Definition, caps *mapper.Capabilities, o options) sea
 		normalizer.WithCategoryMap(caps.CategoryMap),
 	)
 
+	// Resolve the def's declared charset once. A non-UTF-8 def with an
+	// unresolvable encoding fails loud here rather than silently emitting mojibake
+	// titles and mis-encoded searches.
+	enc, err := search.ResolveEncoding(def.Encoding)
+	if err != nil {
+		return search.Deps{}, fmt.Errorf("resolving encoding for %q: %w", def.ID, err)
+	}
+
 	return search.Deps{
 		Filters:    registry,
 		Normalizer: norm,
 		Config:     o.config,
 		BaseURL:    o.baseURL,
 		Clock:      o.clock,
-	}
+		Encoding:   enc,
+	}, nil
 }
 
 // buildLogin constructs the login executor with the HTTP seam, base URL, and
 // config. Its selector engine is bound to the engine's template context by
-// login.New, independent of the per-row selector used in search.
+// login.New, independent of the per-row selector used in search. When the Doer
+// owns a cookie jar (production and the parity harness both drive an
+// *http.Client with one), that SAME jar is handed to the executor so login
+// seeding and the transport's cookie handling share a single jar — a second jar
+// would put duplicate (and, after a login-time session rotation, stale-first)
+// Cookie pairs on the wire.
 func buildLogin(o options) *login.Executor {
-	return login.New(
+	opts := []login.Option{
 		login.WithClient(o.doer),
 		login.WithBaseURL(o.baseURL),
 		login.WithConfig(o.config),
 		login.WithSolver(o.solver),
-	)
+	}
+	if jar := doerJar(o.doer); jar != nil {
+		opts = append(opts, login.WithJar(jar))
+	}
+	return login.New(opts...)
+}
+
+// doerJar returns the cookie jar the Doer applies to outgoing requests: an
+// *http.Client's own Jar, or the jar a wrapper reports via search.JarOwner
+// (the registry's paced client). Nil when the Doer manages no jar — then no
+// cookies flow on the wire, which only offline/parse-only Doers accept.
+func doerJar(d search.Doer) stdhttp.CookieJar {
+	switch c := d.(type) {
+	case *stdhttp.Client:
+		return c.Jar
+	case search.JarOwner:
+		return c.CookieJar()
+	default:
+		return nil
+	}
 }
 
 // firstLink returns the definition's first declared site link, the default base
@@ -243,7 +279,8 @@ func (e *Engine) Search(ctx context.Context, query Query) ([]*Release, error) {
 		// CheckIfLoginIsNeeded -> DoLogin -> re-request). The retry is bounded to
 		// one attempt: a second logged-out result is returned as the error below,
 		// never looped. The relogin re-runs the full login sequence, which clears a
-		// CF-gated login itself (login.solveAndRetryLoginPost), so the search retry
+		// CF-gated login itself (both the form and post methods route a challenged
+		// submit through login.solveAndRetryLoginPost), so the search retry
 		// inherits a fresh authenticated session + cf_clearance.
 		if rerr := e.relogin(ctx); rerr != nil {
 			return nil, fmt.Errorf("cardigann: re-login for %q after session expiry: %w", e.def.ID, rerr)

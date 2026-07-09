@@ -150,6 +150,10 @@ func TestParseDate(t *testing.T) {
 		{"two-digit-year", "yy-MM-dd hh:mm:ss tt", "23-01-02 03:04:05 PM", "2023-01-02T15:04:05Z"},
 		{"tz-zz", "yyyy-MM-dd HH:mm:ss zz", "2023-01-02 15:04:05 +02", "2023-01-02T15:04:05+02:00"},
 		{"missing-year-defaults-clock", "MM/dd HH:mm", "03/15 09:30", "2024-03-15T09:30:00Z"},
+		// Yearless layouts containing y/h/d hit Jackett's commonStandardFormats
+		// early return, so a FUTURE result is NOT rolled back (12-25 is after the
+		// 2024-06-01 clock but stays 2024). This pins parity against reintroducing
+		// an ungated rollback (see rollbackFutureYearless).
 		{"missing-year-month-day", "MM-dd", "12-25", "2024-12-25T00:00:00Z"},
 		// .NET matches AM/PM designators case-insensitively (Jackett parses these);
 		// normalizeAMPM compensates for Go's uppercase-only PM token.
@@ -171,6 +175,11 @@ func TestParseDate(t *testing.T) {
 		// A weekday NAME is not a date component (.NET and Go alike): a layout with
 		// only a weekday + time still defaults the full date from the clock.
 		{"weekday-name-is-not-a-date", "ddd HH:mm", "Sat 14:30", "2024-06-01T14:30:00Z"},
+		// Letterless yearless layouts (no y/h/d) DO reach Jackett's rollback tail
+		// (ParseDateTimeGoLangTest): a future result rolls back one year, a past
+		// result does not. Dormant for the corpus (no such layout exists today).
+		{"letterless-future-rolls-back", "MMM", "Dec", "2023-12-01T00:00:00Z"},
+		{"letterless-past-no-rollback", "MMM", "Jan", "2024-01-01T00:00:00Z"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -250,6 +259,31 @@ func TestParseRelTime(t *testing.T) {
 		{"yesterday-time", "yesterday 14:22", "2024-05-31T14:22:00Z"},
 		{"today-time", "today 08:00", "2024-06-01T08:00:00Z"},
 		{"tomorrow", "tomorrow", "2024-06-02T00:00:00Z"},
+		{"bare-today", "today", "2024-06-01T00:00:00Z"},
+		// IP.Board/XenForo forms: Jackett's named-day regexes consume the comma
+		// and optional "at", and the remainder parses with am/pm support.
+		{"today-comma-time", "Today, 14:22", "2024-06-01T14:22:00Z"},
+		{"today-comma-at-time", "Today, at 14:22", "2024-06-01T14:22:00Z"},
+		{"today-at-time", "today at 14:22", "2024-06-01T14:22:00Z"},
+		{"yesterday-comma-pm", "Yesterday, 10:11 pm", "2024-05-31T22:11:00Z"},
+		{"yesterday-comma-am", "Yesterday, 10:11 am", "2024-05-31T10:11:00Z"},
+		// "[weekday] at [time]" (Jackett _DaysOfWeekRegexp): most recent past
+		// occurrence of the weekday. The 2024-06-01 clock is a Saturday.
+		{"weekday-at", "Friday at 22:14", "2024-05-31T22:14:00Z"},
+		{"weekday-at-pm", "Monday at 10:11 pm", "2024-05-27T22:11:00Z"},
+		// Jackett's walk-back starts AT today, so a weekday matching the clock's
+		// day resolves to today even when the time is still ahead of the clock.
+		{"weekday-at-today-counts", "Saturday at 14:22", "2024-06-01T14:22:00Z"},
+		// Missing-year forms (Jackett _MissingYearRegexp/2): clock year, rolled
+		// back one year when the result would be in the future.
+		{"missing-year-numeric", "05-14 22:10", "2024-05-14T22:10:00Z"},
+		{"missing-year-numeric-future-rolls-back", "12-25 10:00", "2023-12-25T10:00:00Z"},
+		{"missing-year-numeric-bare", "12-25", "2023-12-25T00:00:00Z"},
+		{"missing-year-month", "2 Jan 15:30", "2024-01-02T15:30:00Z"},
+		// Fuzzy-fallback layouts: explicit year, so NO rollback even when future.
+		{"fuzzy-month-comma-time", "Jan 2, 2026 15:30", "2026-01-02T15:30:00Z"},
+		{"fuzzy-day-month-year-time", "2 Jan 2026 15:30", "2026-01-02T15:30:00Z"},
+		{"fuzzy-month-comma-time-pm", "Jan 2, 2026 3:30 pm", "2026-01-02T15:30:00Z"},
 		{"unix-seconds", "1577880000", "2020-01-01T12:00:00Z"},
 		// PARITY: Jackett treats EVERY all-digit value as seconds (no millis
 		// heuristic), so a 13-digit value renders as a far-future seconds
@@ -311,6 +345,21 @@ func TestParseRelTimeFailure(t *testing.T) {
 	p := dateparse.New(dateparse.WithClock(fixedClock()))
 	if _, err := p.ParseRelTime("gibberish"); err == nil {
 		t.Fatal("expected error for unparseable relative value, got nil")
+	}
+	// Named day with an unparseable trailing time: Jackett's DateTime.Parse
+	// throws out of FromUnknown, so this must error — never silent midnight.
+	if _, err := p.ParseRelTime("today blah"); err == nil {
+		t.Fatal("expected error for unparseable time after named day, got nil")
+	}
+	// Same commitment for the weekday branch: once "monday at " matched, an
+	// unparseable time is an error, never a silent midnight.
+	if _, err := p.ParseRelTime("Monday at blah"); err == nil {
+		t.Fatal("expected error for unparseable time after weekday, got nil")
+	}
+	// A dd-MM pair that is not a valid month-day must error (Jackett's fuzzy
+	// parse of "2024-25-12" throws), never normalize into a different month.
+	if _, err := p.ParseRelTime("25-12 10:00"); err == nil {
+		t.Fatal("expected error for invalid month-day, got nil")
 	}
 }
 

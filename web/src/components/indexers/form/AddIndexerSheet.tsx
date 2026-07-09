@@ -25,16 +25,13 @@ export function IndexerSheet({ state, onClose }: { state: IndexerSheetState, onC
 }
 
 function useSaveAndTest(onClose: () => void) {
-  const test = useTestIndexer()
+  // toastResult: true — the sheet closes (unmounts) right after mutate() fires,
+  // so the pass/fail toast must be hook-level to survive that unmount (see
+  // useTestIndexer in useIndexers.ts).
+  const test = useTestIndexer({ toastResult: true })
   return (slug: string, verb: string) => {
     toast.success(`${slug} ${verb} — testing…`)
-    test.mutate(slug, {
-      onSuccess: (result) => {
-        if (result.ok) toast.success(`${slug}: test passed`)
-        else toast.error(`${slug}: test failed — ${result.error ?? "unknown error"}`)
-      },
-      onError: () => toast.error(`${slug}: test request failed`),
-    })
+    test.mutate(slug)
     onClose()
   }
 }

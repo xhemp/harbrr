@@ -37,24 +37,88 @@ type builtRequest struct {
 	// request so a mixed HTML+JSON multi-path def parses each body under its own
 	// path's type, matching Jackett's per-SearchPath response handling.
 	respType string
+	// noResultsMessage is this path's Response.NoResultsMessage; nil when the
+	// def doesn't declare one. Consumed by noResultsMatch (search.go).
+	noResultsMessage *string
 }
 
-// buildRequests renders every search path the definition declares (Search.Path
-// or Search.Paths[]) against the query, producing one builtRequest per path.
-// Mirrors Jackett PerformQuery's per-SearchPath loop: render the path template,
+// buildRequests renders each search path the definition declares (Search.Path
+// or Search.Paths[]) against the query, producing one builtRequest per
+// surviving path. Mirrors Jackett PerformQuery's per-SearchPath loop: apply the
+// path's category gate (narrowToPathCategories), render the path template,
 // resolve it against BaseURL, assemble the inputs (inherited Search.Inputs then
 // path Inputs) into a GET query string or POST body, and attach Search.Headers.
 func buildRequests(def *loader.Definition, query Query, deps Deps) ([]builtRequest, error) {
+	query, err := applyKeywordsFilters(def, query, deps)
+	if err != nil {
+		return nil, err
+	}
 	paths := searchPaths(def)
 	out := make([]builtRequest, 0, len(paths))
 	for i := range paths {
-		req, err := buildOneRequest(def, paths[i], query, deps)
+		pathQuery, ok := narrowToPathCategories(query, paths[i].Categories)
+		if !ok {
+			continue
+		}
+		req, err := buildOneRequest(def, paths[i], pathQuery, deps)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, req)
 	}
 	return out, nil
+}
+
+// narrowToPathCategories applies a path's category gate, mirroring Jackett's
+// SearchPaths loop: a path with categories runs only when they intersect the
+// query's mapped categories — a leading "!" element inverts the test — and the
+// surviving path sees {{ .Categories }} narrowed to that intersection (empty
+// for a matching inverted path, exactly as Jackett's Intersect yields there).
+// A non-matching path is skipped. Paths without categories always run with the
+// full list. The query's Categories already carry the DefaultCategories
+// fallback (torznabhttp buildQuery), so like Jackett a query that still has no
+// categories skips every non-inverted category-gated path.
+func narrowToPathCategories(query Query, pathCats []loader.Scalar) (Query, bool) {
+	if len(pathCats) == 0 {
+		return query, true
+	}
+	cats := make([]string, len(pathCats))
+	for i := range pathCats {
+		cats[i] = pathCats[i].String()
+	}
+	intersection := intersect(query.Categories, cats)
+	matched := len(intersection) > 0
+	if cats[0] == "!" {
+		matched = !matched
+	}
+	if !matched {
+		return Query{}, false
+	}
+	query.Categories = intersection
+	return query, true
+}
+
+// intersect returns the distinct elements of a that also appear in b, in a's
+// order — .NET Enumerable.Intersect semantics, which the narrowed
+// {{ .Categories }} request bytes depend on.
+func intersect(a, b []string) []string {
+	inB := make(map[string]struct{}, len(b))
+	for _, v := range b {
+		inB[v] = struct{}{}
+	}
+	var out []string
+	seen := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		if _, ok := inB[v]; !ok {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
 
 // searchPaths normalizes the Search.Path / Search.Paths oneOf into a single
@@ -89,6 +153,12 @@ func buildOneRequest(def *loader.Definition, path loader.SearchPathBlock, query 
 	if err != nil {
 		return builtRequest{}, err
 	}
+	// Codepage-encode the GET query / POST body values in the def's charset
+	// (Jackett GetQueryString(Encoding) / FormUrlEncodedContentWithEncoding). The
+	// path template above stays UTF-8 (requestPathContext), matching Jackett's
+	// asymmetry: only input pairs are codepage-encoded, never path-substituted
+	// values. No-op for UTF-8/no-encoding defs.
+	pairs = codepageEncodePairs(deps.Encoding, pairs)
 
 	headers, err := renderHeaders(def.Search.Headers, requestContext(query, deps))
 	if err != nil {
@@ -103,7 +173,7 @@ func buildOneRequest(def *loader.Definition, path loader.SearchPathBlock, query 
 // mutates it).
 func requestContext(query Query, deps Deps) *template.Context {
 	config := withSitelink(deps.Config, deps.BaseURL)
-	return newContext(config, query.queryMap(), nil, query.keywords(), query.Categories, deps.Clock)
+	return newContext(config, query.queryMap(), nil, query.templateKeywords(), query.Categories, deps.Clock)
 }
 
 // requestPathContext is requestContext with every scalar variable value
@@ -114,7 +184,7 @@ func requestContext(query Query, deps Deps) *template.Context {
 func requestPathContext(query Query, deps Deps) *template.Context {
 	config := encodeStringValues(withSitelink(deps.Config, deps.BaseURL))
 	return newContext(config, encodeStringValues(query.queryMap()), nil,
-		pathEscape(query.keywords()), encodeStringSlice(query.Categories), deps.Clock)
+		pathEscape(query.templateKeywords()), encodeStringSlice(query.Categories), deps.Clock)
 }
 
 // pathEscape URL-encodes a value for inlining into a path/query, with spaces as
@@ -237,12 +307,13 @@ func splitRaw(raw string) []kv {
 func assembleRequest(path loader.SearchPathBlock, absURL string, pairs []kv, headers map[string][]string) (builtRequest, error) {
 	if strings.EqualFold(path.Method, stdhttp.MethodPost) {
 		return builtRequest{
-			method:         stdhttp.MethodPost,
-			url:            absURL,
-			body:           encodeOrdered(pairs),
-			headers:        withFormContentType(headers),
-			followRedirect: boolVal(path.FollowRedirect),
-			respType:       pathResponseType(path),
+			method:           stdhttp.MethodPost,
+			url:              absURL,
+			body:             encodeOrdered(pairs),
+			headers:          withFormContentType(headers),
+			followRedirect:   boolVal(path.FollowRedirect),
+			respType:         pathResponseType(path),
+			noResultsMessage: pathNoResultsMessage(path),
 		}, nil
 	}
 
@@ -251,11 +322,12 @@ func assembleRequest(path loader.SearchPathBlock, absURL string, pairs []kv, hea
 		return builtRequest{}, err
 	}
 	return builtRequest{
-		method:         stdhttp.MethodGet,
-		url:            full,
-		headers:        headers,
-		followRedirect: boolVal(path.FollowRedirect),
-		respType:       pathResponseType(path),
+		method:           stdhttp.MethodGet,
+		url:              full,
+		headers:          headers,
+		followRedirect:   boolVal(path.FollowRedirect),
+		respType:         pathResponseType(path),
+		noResultsMessage: pathNoResultsMessage(path),
 	}, nil
 }
 
@@ -266,6 +338,15 @@ func pathResponseType(path loader.SearchPathBlock) string {
 		return path.Response.Type
 	}
 	return ""
+}
+
+// pathNoResultsMessage reads a path's own Response.NoResultsMessage; nil (no
+// response block or no message) disables the no-results short-circuit.
+func pathNoResultsMessage(path loader.SearchPathBlock) *string {
+	if path.Response != nil {
+		return path.Response.NoResultsMessage
+	}
+	return nil
 }
 
 // encodeOrdered renders pairs as an ordered x-www-form-urlencoded string
@@ -364,8 +445,9 @@ func renderHeaders(in map[string][]string, ctx *template.Context) (map[string][]
 }
 
 // newRequest builds the *http.Request for a builtRequest: context, optional form
-// body, rendered headers, then the session cookies + solver UA (applySession).
-// Shared by doRequest and doSearchRequest so both issue byte-identical requests.
+// body, rendered headers, then the session's solver UA (applySession); cookies
+// ride the Doer's jar. Shared by doRequest and doSearchRequest so both issue
+// byte-identical requests.
 func newRequest(ctx context.Context, br builtRequest, session *login.Session) (*stdhttp.Request, error) {
 	var bodyReader io.Reader
 	if br.body != "" {
@@ -399,8 +481,8 @@ func checkStatus(resp *stdhttp.Response, br builtRequest) error {
 	return fmt.Errorf("%s %s: tracker returned HTTP %d", br.method, apphttp.SchemeHost(br.url), resp.StatusCode)
 }
 
-// doRequest issues one builtRequest through the Doer, attaching the session
-// cookies and rendered headers, and reads the (capped) response body. Any
+// doRequest issues one builtRequest through the Doer, attaching the rendered
+// headers and session UA, and reads the (capped) response body. Any
 // non-2xx status fails fast (see checkStatus). Used by the download/grab flows,
 // whose requests keep the client's default redirect-following (Jackett's
 // download path always follows); search-path requests go through
@@ -490,25 +572,20 @@ func redirectTarget(resp *stdhttp.Response, reqURL string) string {
 // against a hostile/broken server streaming unbounded bytes.
 const maxSearchBodyBytes = 32 << 20 // 32 MiB
 
-// applySession attaches the session jar's cookies for the request URL, so the
-// offline replay transport (and a jar-less production Doer) sees authenticated
-// cookies on the wire. When the session carries an anti-bot solver User-Agent, it
-// is replayed too: a Cloudflare cf_clearance cookie in the jar is bound to that
-// UA, so the search must send it or the clearance is rejected and the tracker
-// returns the challenge/login page (a false logged-out). A definition's own
-// User-Agent header still wins.
+// applySession replays the session's anti-bot solver User-Agent: a Cloudflare
+// cf_clearance cookie in the client jar is bound to that UA, so the search must
+// send it or the clearance is rejected and the tracker returns the
+// challenge/login page (a false logged-out). A definition's own User-Agent
+// header still wins. Cookies are deliberately NOT touched here — the Doer's jar
+// is the single cookie authority (see login.Doer); adding jar cookies here as
+// well would duplicate every pair on the wire, and a stale-first duplicate after
+// a login-time session rotation presents the logged-out session forever.
 func applySession(req *stdhttp.Request, session *login.Session) {
 	if session == nil {
 		return
 	}
 	if session.UserAgent != "" && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", session.UserAgent)
-	}
-	if session.Jar == nil {
-		return
-	}
-	for _, c := range session.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
 	}
 }
 

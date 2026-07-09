@@ -30,11 +30,11 @@ func jackettCategoriesDef() *loader.Definition {
 		ID:    "jackett-categories-oracle",
 		Links: []string{"https://example.com"},
 		Caps: loader.Caps{
-			Categories: map[string]string{
-				"1":      "Movies",       // integer cat (has children)
-				"mov_sd": "Movies/SD",    // string cat (child cat)
-				"33":     "Books/Comics", // integer cat (child cat)
-			},
+			Categories: loader.NewCategoriesBlock(
+				loader.CategoryEntry{TrackerID: "1", Name: "Movies"},         // integer cat (has children)
+				loader.CategoryEntry{TrackerID: "mov_sd", Name: "Movies/SD"}, // string cat (child cat)
+				loader.CategoryEntry{TrackerID: "33", Name: "Books/Comics"},  // integer cat (child cat)
+			),
 			CategoryMappings: []loader.CategoryMapping{
 				{ID: scalar("44"), Cat: "Console/XBox", Desc: "Console/Xbox_c"},    // -> custom 100044
 				{ID: scalar("con_wii"), Cat: "Console/Wii", Desc: "Console/Wii_c"}, // -> custom 137107
@@ -53,7 +53,7 @@ func jackettModesDef() *loader.Definition {
 		ID:    "jackett-modes-oracle",
 		Links: []string{"https://example.com"},
 		Caps: loader.Caps{
-			Categories: map[string]string{},
+			Categories: loader.NewCategoriesBlock(),
 			Modes: loader.Modes{
 				Search:      []string{"q"},
 				TVSearch:    []string{"q", "season", "ep", "imdbid", "tvdbid", "rid"},
@@ -111,7 +111,7 @@ func TestMarshalCapsGolden(t *testing.T) {
 				ID:    "rawsearch",
 				Links: []string{"https://example.com"},
 				Caps: loader.Caps{
-					Categories:        map[string]string{"7": "Movies/HD"},
+					Categories:        loader.NewCategoriesBlock(loader.CategoryEntry{TrackerID: "7", Name: "Movies/HD"}),
 					AllowRawSearch:    boolPtr(true),
 					AllowTVSearchIMDB: boolPtr(true),
 					Modes: loader.Modes{

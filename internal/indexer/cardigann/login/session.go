@@ -12,26 +12,29 @@ import (
 )
 
 // Doer is the narrow HTTP seam the executor drives. It is satisfied by
-// *http.Client in production and by a replay transport in tests, so NO live
-// network call ever happens in this package's code or tests. Keeping the seam to
-// a single method (mirroring http.Client.Do) lets the production client own
-// cookie-jar persistence and redirect following while the executor stays
-// transport-agnostic. (Login requests keep the client's follow behavior — the
-// post-login 302 lands on the page the error/test selectors read; only SEARCH
-// requests opt out via apphttp.WithNoRedirectFollow, see search/redirect.go.)
+// *http.Client in production and by a client-wrapped replay transport in tests,
+// so NO live network call ever happens in this package's code or tests. Keeping
+// the seam to a single method (mirroring http.Client.Do) lets the production
+// client own redirect following while the executor stays transport-agnostic.
+// (Login requests keep the client's follow behavior — the post-login 302 lands
+// on the page the error/test selectors read; only SEARCH requests opt out via
+// apphttp.WithNoRedirectFollow, see search/redirect.go.)
+//
+// Cookie contract: the Doer owns the ONE cookie jar — it applies jar cookies to
+// every outgoing request and records Set-Cookie from every response hop,
+// including the Set-Cookie a login POST's 302 carries (a session rotation the
+// executor never sees, because the client follows the redirect and hands back
+// only the final response). The executor NEVER writes a Cookie header itself;
+// it only SEEDS its Jar (which must be the Doer's jar, see WithJar) for the
+// manual-cookie method, static Login.Cookies, and solver results.
 type Doer interface {
 	Do(*stdhttp.Request) (*stdhttp.Response, error)
 }
 
-// Session carries the cookie state established by a login, handed to the search
-// stage so authenticated requests reuse the same jar. It is a thin
-// wrapper; it exists so the search stage depends on a stable type rather
-// than reaching into Executor internals. Obtain one via Executor.Session after a
-// successful Login/EnsureLoggedIn.
+// Session carries the login state the search stage must replay. Cookies are NOT
+// part of it: the shared client jar applies them transport-side (see Doer).
+// Obtain one via Executor.Session after a successful Login/EnsureLoggedIn.
 type Session struct {
-	// Jar holds every cookie captured during login (Set-Cookie from the login
-	// round-trip, or the seeded cookie for the manual-cookie method).
-	Jar stdhttp.CookieJar
 	// UserAgent is the anti-bot solver's User-Agent, set once a solve occurred this
 	// session. A Cloudflare cf_clearance cookie is bound to the User-Agent that
 	// earned it, so the search stage must replay the SAME UA the solver used or the
@@ -40,12 +43,11 @@ type Session struct {
 	UserAgent string
 }
 
-// Session returns the cookie state established by the executor's login, for the
-// search stage to reuse the authenticated jar (and the solver UA bound to any
-// cf_clearance in it). It is meaningful only after a successful
-// Login/EnsureLoggedIn; before that the jar is empty.
+// Session returns the login state the search stage replays per request (today:
+// the solver UA bound to any cf_clearance in the shared jar). It is meaningful
+// only after a successful Login/EnsureLoggedIn.
 func (e *Executor) Session() *Session {
-	return &Session{Jar: e.Jar, UserAgent: e.solverUA()}
+	return &Session{UserAgent: e.solverUA()}
 }
 
 // solverUA returns the persisted solver User-Agent under the read lock. The
@@ -66,13 +68,16 @@ func (e *Executor) setSolverUA(ua string) {
 	e.SolverUserAgent = ua
 }
 
-// Executor performs a definition's login sequence against the injected Doer and
-// owns the cookie jar. It owns the jar (rather than receiving cookies per call)
-// because the cookie method must SEED the jar and re-login must INSPECT it.
+// Executor performs a definition's login sequence against the injected Doer.
+// Cookie state lives in ONE jar — the Doer's — which the executor holds a
+// reference to for SEEDING (manual-cookie method, static Login.Cookies, solver
+// results); it never applies or stores cookies on the wire itself (see Doer).
 type Executor struct {
 	// Client is the HTTP seam. Required.
 	Client Doer
-	// Jar holds cookie state across the login round-trip and into search.
+	// Jar is the cookie jar the executor seeds. It MUST be the same jar the
+	// Client applies (an *http.Client's Jar), or seeded cookies never reach the
+	// wire; the engine wires this via login.WithJar from the Doer's own jar.
 	Jar stdhttp.CookieJar
 	// BaseURL is the tracker site link, used to resolve relative login/test
 	// paths and to scope seeded cookies. Trailing-slash-insensitive.
@@ -106,8 +111,11 @@ type Option func(*Executor)
 // WithClient sets the HTTP Doer seam.
 func WithClient(c Doer) Option { return func(e *Executor) { e.Client = c } }
 
-// WithJar sets the cookie jar. When unset, New installs a publicsuffix-backed
-// jar so production callers get correct cross-subdomain cookie scoping for free.
+// WithJar sets the cookie jar the executor seeds. Pass the SAME jar the Doer
+// applies (the *http.Client's Jar) — one shared jar is what keeps login and
+// search cookies consistent on the wire. When unset, New installs a
+// publicsuffix-backed jar; seeding still works locally, but a Doer that does
+// not share it will never send the seeded cookies.
 func WithJar(j stdhttp.CookieJar) Option { return func(e *Executor) { e.Jar = j } }
 
 // WithBaseURL sets the tracker site link used to resolve relative paths.
@@ -121,9 +129,10 @@ func WithConfig(c map[string]string) Option { return func(e *Executor) { e.Confi
 func WithSolver(s Solver) Option { return func(e *Executor) { e.Solver = s } }
 
 // New constructs an Executor. It installs a publicsuffix-backed cookie jar and a
-// selector engine bound to the template context unless overridden, so the only
-// strictly required option for production is WithClient. cookiejar.New with the
-// publicsuffix list never returns an error, so the fallback is unconditional.
+// selector engine bound to the template context unless overridden. Production
+// callers pass WithClient plus WithJar sharing the client's own jar (the engine
+// does this in buildLogin). cookiejar.New with the publicsuffix list never
+// returns an error, so the fallback is unconditional.
 func New(opts ...Option) *Executor {
 	e := &Executor{Config: map[string]string{}}
 	for _, opt := range opts {

@@ -166,14 +166,17 @@ func (b builder) build() (*Capabilities, error) {
 }
 
 // mapCategories handles the caps.categories object form (tracker id -> category
-// name). Per Jackett, these have no desc, so no custom category is synthesised.
+// name), iterating in definition (YAML) order so the category map's entry order
+// — and hence the tracker-id order a multi-cat query renders into
+// {{ .Categories }} — reproduces Jackett's insertion-ordered _categoryMapping.
+// Per Jackett, these have no desc, so no custom category is synthesised.
 func (b builder) mapCategories() error {
-	for trackerID, name := range b.def.Caps.Categories {
-		cat, ok := GetByName(name)
+	for _, e := range b.def.Caps.Categories.Ordered() {
+		cat, ok := GetByName(e.Name)
 		if !ok {
-			return fmt.Errorf("mapper: definition %q: caps.categories id %q references unknown category name %q", b.def.ID, trackerID, name)
+			return fmt.Errorf("mapper: definition %q: caps.categories id %q references unknown category name %q", b.def.ID, e.TrackerID, e.Name)
 		}
-		b.addMapping(trackerID, "", cat)
+		b.addMapping(e.TrackerID, "", cat)
 	}
 	return nil
 }

@@ -91,8 +91,8 @@ func TestParseValid(t *testing.T) {
 			name:    "json api categories object + paths + selectorblock unions",
 			fixture: "json_minimal.yml",
 			check: func(t *testing.T, def *Definition) {
-				if def.Caps.Categories["XXX"] != "XXX" {
-					t.Errorf("categories[XXX] = %q, want XXX", def.Caps.Categories["XXX"])
+				if name, _ := def.Caps.Categories.Get("XXX"); name != "XXX" {
+					t.Errorf("categories[XXX] = %q, want XXX", name)
 				}
 				if len(def.Search.Paths) != 1 || def.Search.Paths[0].Response == nil {
 					t.Fatalf("paths = %+v", def.Search.Paths)
@@ -174,6 +174,84 @@ func TestInputsBlockPreservesOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("input keys = %v, want %v (definition order)", got, want)
 		}
+	}
+}
+
+// TestCategoriesBlockPreservesOrder proves the caps.categories object form
+// decodes in definition (YAML) order, not lexical or randomized. Jackett's
+// YamlDotNet dictionary preserves document order and its _categoryMapping —
+// and hence the {{ .Categories }} bytes a multi-cat query renders — inherit
+// it; a plain Go map would randomize the order per process.
+func TestCategoriesBlockPreservesOrder(t *testing.T) {
+	t.Parallel()
+
+	d, err := Parse(readFixture(t, "json_minimal.yml"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	ordered := d.Caps.Categories.Ordered()
+	got := make([]string, 0, len(ordered))
+	for _, e := range ordered {
+		got = append(got, e.TrackerID)
+	}
+	want := []string{"XXX", "9", "movies-hd", "2", "zz"}
+	if len(got) != len(want) {
+		t.Fatalf("category ids = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("category ids = %v, want %v (definition order)", got, want)
+		}
+	}
+}
+
+// TestParseNoResultsMessagePointer pins the three decode shapes of
+// response.noResultsMessage. Jackett distinguishes ABSENT (null — no
+// no-results check) from PRESENT-EMPTY (`noResultsMessage: ""` — an
+// exactly-empty body means zero results) from a non-empty substring message,
+// so the field must decode to *string: a missing key must stay nil and the
+// empty-string form must yield a non-nil pointer to "".
+func TestParseNoResultsMessagePointer(t *testing.T) {
+	t.Parallel()
+
+	const line = "        noResultsMessage: \"No results\"\n"
+	base := string(readFixture(t, "json_minimal.yml"))
+	if !strings.Contains(base, line) {
+		t.Fatal("json_minimal.yml no longer carries the noResultsMessage line this test rewrites")
+	}
+
+	tests := []struct {
+		name    string
+		yml     string
+		wantNil bool
+		wantVal string
+	}{
+		{name: "non-empty message", yml: base, wantVal: "No results"},
+		{name: "present-empty message", yml: strings.Replace(base, line, "        noResultsMessage: \"\"\n", 1), wantVal: ""},
+		{name: "absent message", yml: strings.Replace(base, line, "", 1), wantNil: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			def, err := Parse([]byte(tt.yml))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			got := def.Search.Paths[0].Response.NoResultsMessage
+			if tt.wantNil {
+				if got != nil {
+					t.Fatalf("NoResultsMessage = %q, want nil (absent)", *got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("NoResultsMessage = nil, want %q", tt.wantVal)
+			}
+			if *got != tt.wantVal {
+				t.Errorf("NoResultsMessage = %q, want %q", *got, tt.wantVal)
+			}
+		})
 	}
 }
 

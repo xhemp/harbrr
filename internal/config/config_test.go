@@ -125,6 +125,34 @@ func TestLoadEnvOverride(t *testing.T) {
 	}
 }
 
+// TestLoadSecretsEnvOverride proves HARBRR_SECRETS_ENCRYPTION_KEY and
+// HARBRR_SECRETS_KEY_FILE actually reach Config.Secrets, guarding against viper
+// silently dropping keys that are never registered via SetDefault/BindEnv (viper's
+// AutomaticEnv only resolves env vars for keys it already knows about).
+func TestLoadSecretsEnvOverride(t *testing.T) {
+	t.Setenv("HARBRR_SECRETS_ENCRYPTION_KEY", "env-supplied-key")
+
+	cfg, err := config.Load("", nil)
+	if err != nil {
+		t.Fatalf("Load() = %v", err)
+	}
+	if cfg.Secrets.EncryptionKey != "env-supplied-key" {
+		t.Errorf("env override secrets.encryption_key = %q, want env-supplied-key", cfg.Secrets.EncryptionKey)
+	}
+}
+
+func TestLoadSecretsKeyFileEnvOverride(t *testing.T) {
+	t.Setenv("HARBRR_SECRETS_KEY_FILE", "/data/.keys")
+
+	cfg, err := config.Load("", nil)
+	if err != nil {
+		t.Fatalf("Load() = %v", err)
+	}
+	if cfg.Secrets.KeyFile != "/data/.keys" {
+		t.Errorf("env override secrets.key_file = %q, want /data/.keys", cfg.Secrets.KeyFile)
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "harbrr.yaml")

@@ -60,6 +60,12 @@ func (d *scriptedDoer) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
 	}, nil
 }
 
+// RoundTrip lets a real *http.Client (owning a cookie jar, the production shape)
+// wrap the scripted fixture.
+func (d *scriptedDoer) RoundTrip(req *stdhttp.Request) (*stdhttp.Response, error) {
+	return d.Do(req)
+}
+
 func (d *scriptedDoer) sequence() []string {
 	out := make([]string, len(d.requests))
 	for i, r := range d.requests {

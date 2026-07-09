@@ -264,6 +264,87 @@ func TestEvalRealShape(t *testing.T) {
 	}
 }
 
+// TestEvalBadIdentRewriteScope pins the scope of the bad-identifier rewrite:
+// only text inside {{ ... }} action spans is rewritten (Jackett's
+// applyGoTemplateText pattern-matches variables inside actions only). Literal
+// text — in particular values spliced in by the expandFuncs phase, like a
+// dotted release name — must pass through verbatim.
+func TestEvalBadIdentRewriteScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		text    string
+		mutate  func(*Context)
+		want    string
+		wantErr bool
+	}{
+		{
+			// nyaasi-style: re_replace output (phase 1) becomes literal text next
+			// to a surviving {{ if }} action. The dotted keyword must not be
+			// rewritten into (index ...) junk.
+			name:   "dotted keyword injected by re_replace stays verbatim",
+			text:   `{{ if .Keywords }}{{ re_replace .Keywords "\b0(\d{1})\b" "$1" }}{{ else }}{{ end }}`,
+			mutate: func(c *Context) { c.Keywords = "Hotel.del.Luna.2019.1080p" },
+			want:   "Hotel.del.Luna.2019.1080p",
+		},
+		{
+			// mypornclub-style path with a dash-separated dotted keyword.
+			name:   "dotted keyword next to residual actions in a path",
+			text:   `{{ if .Keywords }}s/{{ re_replace .Keywords "\s+" "-" }}{{ else }}ts{{ end }}`,
+			mutate: func(c *Context) { c.Keywords = "Top.Gear S01" },
+			want:   "s/Top.Gear-S01",
+		},
+		{
+			name:   "leading-digit config key inside action is rewritten",
+			text:   `code={{ .Config.2facode }}`,
+			mutate: func(c *Context) { c.Config["2facode"] = "123456" },
+			want:   "code=123456",
+		},
+		{
+			name:   "dashed config key inside action is rewritten",
+			text:   `{{ if .Config.cat-id }}cat={{ .Config.cat-id }}{{ else }}all{{ end }}`,
+			mutate: func(c *Context) { c.Config["cat-id"] = "7" },
+			want:   "cat=7",
+		},
+		{
+			// Both at once: the action-internal ref is rewritten while the
+			// phase-1-injected literal on the same line is untouched.
+			name: "literal dotted text and action-internal bad ref coexist",
+			text: `{{ re_replace .Keywords "\s+" "+" }}&cat={{ .Config.cat-id }}`,
+			mutate: func(c *Context) {
+				c.Keywords = "Hotel.del.Luna.2019.1080p"
+				c.Config["cat-id"] = "7"
+			},
+			want: "Hotel.del.Luna.2019.1080p&cat=7",
+		},
+		{
+			// Unclosed "{{" stays a parse error surfaced by the stdlib parser;
+			// the span scan must not panic or eat the text.
+			name:    "unclosed action still errors, does not panic",
+			text:    `{{ if .Keywords }}x`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := NewContext()
+			if tt.mutate != nil {
+				tt.mutate(ctx)
+			}
+			got, err := Eval(tt.text, ctx)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Eval(%q) error = %v, wantErr %v", tt.text, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Fatalf("Eval(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestCorpusParses is the parse/eval gate for this stage: every template string
 // in every vendored definition must Eval cleanly (parse + execute) against a
 // representative Context. It proves the whole corpus parses and executes under

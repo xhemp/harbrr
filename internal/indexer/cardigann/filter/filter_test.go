@@ -36,6 +36,19 @@ func TestApplyStringFilters(t *testing.T) {
 		{name: "tolower", in: "AbC", filters: []loader.FilterBlock{fb("tolower")}, want: "abc"},
 		{name: "toupper", in: "AbC", filters: []loader.FilterBlock{fb("toupper")}, want: "ABC"},
 		{name: "urldecode plus", in: "a+b%20c", filters: []loader.FilterBlock{fb("urldecode")}, want: "a b c"},
+		// WebUtility.UrlDecode leniency (vs url.QueryUnescape, which errors on any
+		// invalid escape): malformed percent sequences stay literal, never error.
+		// Real-world trigger: querystring-then-urldecode chains (e.g. aftershock)
+		// feed already-decoded titles like "100% FLAC" back through urldecode.
+		{name: "urldecode bare percent literal", in: "100% FLAC", filters: []loader.FilterBlock{fb("urldecode")}, want: "100% FLAC"},
+		{name: "urldecode valid escape and plus", in: "100%25+FLAC", filters: []loader.FilterBlock{fb("urldecode")}, want: "100% FLAC"},
+		{name: "urldecode multibyte utf8", in: "%E2%80%A6", filters: []loader.FilterBlock{fb("urldecode")}, want: "…"},
+		{name: "urldecode lowercase hex", in: "%2f", filters: []loader.FilterBlock{fb("urldecode")}, want: "/"},
+		{name: "urldecode uppercase hex", in: "%2F", filters: []loader.FilterBlock{fb("urldecode")}, want: "/"},
+		{name: "urldecode trailing percent", in: "abc%", filters: []loader.FilterBlock{fb("urldecode")}, want: "abc%"},
+		{name: "urldecode one hex digit then end", in: "abc%2", filters: []loader.FilterBlock{fb("urldecode")}, want: "abc%2"},
+		{name: "urldecode non-hex escape", in: "a%GGb", filters: []loader.FilterBlock{fb("urldecode")}, want: "a%GGb"},
+		{name: "urldecode percent before valid escape", in: "%%41", filters: []loader.FilterBlock{fb("urldecode")}, want: "%A"},
 		{name: "urlencode space", in: "a b", filters: []loader.FilterBlock{fb("urlencode")}, want: "a+b"},
 		{name: "htmldecode", in: "a&amp;b&lt;c", filters: []loader.FilterBlock{fb("htmldecode")}, want: "a&b<c"},
 		{name: "htmlencode", in: "a&b<c", filters: []loader.FilterBlock{fb("htmlencode")}, want: "a&amp;b&lt;c"},
