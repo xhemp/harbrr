@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // rewriteContains rewrites every `:contains(...)` pseudo-class in a selector
@@ -252,7 +253,17 @@ func parseCSSEscape(s string, i int) (string, int, error) {
 				j++
 			}
 		}
-		return string(rune(v)), j, nil
+		// v is a raw uint64 from up to 6 hex digits (max 0xFFFFFF), which already
+		// exceeds utf8.MaxRune — bound-check before the int32 truncation rather
+		// than relying on it. Go's string(rune) conversion already substitutes
+		// utf8.RuneError for any invalid rune (out-of-range or a surrogate half),
+		// so this is behavior-preserving, just an explicit gate instead of an
+		// implicit one.
+		r := utf8.RuneError
+		if v <= utf8.MaxRune {
+			r = rune(v)
+		}
+		return string(r), j, nil
 	}
 	return s[start : start+1], start + 1, nil
 }

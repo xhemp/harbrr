@@ -266,3 +266,39 @@ func TestContainsRemoveRespectsCase(t *testing.T) {
 		t.Fatalf("text after remove = %q, want %q (case-insensitive :contains removed both spans)", v, "vip")
 	}
 }
+
+// TestParseCSSEscapeHexBounds pins parseCSSEscape's hex-escape decoding,
+// including the bound check on the uint64->rune conversion (CodeQL
+// go/incorrect-integer-conversion): up to 6 hex digits (max 0xFFFFFF) can
+// exceed utf8.MaxRune (0x10FFFF) or land on a surrogate half, both of which
+// must degrade to the replacement character rather than trust the truncation.
+func TestParseCSSEscapeHexBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"single ascii hex escape", `\41 `, "A"},           // U+0041 'A', trailing space consumed
+		{"max valid code point", `\10FFFF `, "\U0010FFFF"}, // exactly utf8.MaxRune
+		{"astral code point", `\1F600 `, "\U0001F600"},     // outside the BMP, still valid
+		{"one past max valid", `\110000 `, "�"},            // first value to overflow utf8.MaxRune
+		{"six f's, max parseable", `\FFFFFF `, "�"},        // 0xFFFFFF, far past utf8.MaxRune
+		{"high surrogate half", `\D800 `, "�"},             // within utf8.MaxRune but not a valid rune
+		{"low surrogate half", `\DFFF `, "�"},              // ditto
+		{"nul escape", `\0 `, "\x00"},                      // 0 is in-range; not a surrogate
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, _, err := parseCSSEscape(tt.in, 0)
+			if err != nil {
+				t.Fatalf("parseCSSEscape(%q) err = %v", tt.in, err)
+			}
+			if got != tt.want {
+				t.Fatalf("parseCSSEscape(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
