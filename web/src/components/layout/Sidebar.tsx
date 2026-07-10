@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { Database, ExternalLink, LayoutDashboard, LogOut, RefreshCw, Search, Server, Settings, Shield } from "lucide-react"
+import { Copyright, Database, ExternalLink, LayoutDashboard, LogOut, RefreshCw, Search, Server, Settings, Shield } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { ThemeControl } from "@/components/layout/ThemeControl"
 import { Badge } from "@/components/ui/badge"
@@ -73,18 +73,24 @@ export function Sidebar() {
 
       <div className="flex flex-col border-t border-sidebar-border px-3 py-3">
         <UserChip />
-        <div className="mt-1 flex items-center px-2.5 pt-1">
-          {window.__HARBRR_VERSION__ && (
-            <span className="select-none text-[10px] font-medium text-faint">
-              {window.__HARBRR_VERSION__}
-            </span>
-          )}
+        <div className="mt-2 flex items-center justify-between px-2.5 pt-1">
+          <div className="flex select-none flex-col gap-0.5 text-[10px] text-faint">
+            {window.__HARBRR_VERSION__ && (
+              <span className="font-medium">
+                Version {window.__HARBRR_VERSION__.split(" ")[0]}
+              </span>
+            )}
+            <div className="flex items-center gap-1">
+              <Copyright className="h-2.5 w-2.5" />
+              <span>{new Date().getFullYear()} harbrr</span>
+            </div>
+          </div>
           <a
             href="https://github.com/autobrr/harbrr"
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub"
-            className="ml-auto text-faint transition hover:text-muted-foreground"
+            className="text-faint transition hover:text-muted-foreground"
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
