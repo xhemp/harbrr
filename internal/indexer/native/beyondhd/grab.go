@@ -7,6 +7,7 @@ import (
 	"io"
 	stdhttp "net/http"
 
+	apphttp "github.com/autobrr/harbrr/internal/http"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 )
@@ -24,8 +25,8 @@ var errDownloadTooLarge = errors.New("beyondhd: download exceeds the size cap")
 // through the /dl proxy; this is the server-side fetch /dl drives, so the credential-bearing
 // URL never reaches the feed. The download is a direct torrent (never a magnet), so Redirect
 // is empty. No auth header is needed — the rsskey rides in the URL — so the GET is plain.
-// No error carries the download URL (its rsskey sits in the PATH, where apphttp.RedactURL
-// would NOT redact it), so the URL is kept out of every error entirely.
+// No error carries the rsskey-bearing download URL: a build or transport error surfaces
+// only its scheme://host (apphttp.SchemeHost drops the PATH where the rsskey lives).
 func (d *driver) Grab(ctx context.Context, link string) (*search.GrabResult, error) {
 	resp, err := d.get(ctx, link)
 	if err != nil {
@@ -57,20 +58,17 @@ func (d *driver) Grab(ctx context.Context, link string) (*search.GrabResult, err
 
 // get issues a plain GET for a BeyondHD download URL. The URL already carries its own rsskey
 // in its PATH (no auth header is needed for the download), so no header is set. The URL is
-// secret-bearing and apphttp.RedactURL would NOT redact a path-embedded rsskey, so a
-// transport error is kept free of the URL entirely (the caller's sanitizeGrabError replaces a
-// non-sentinel error with a fixed, link-free message). The caller owns the returned body.
+// secret-bearing, so a build or transport error surfaces only its scheme://host
+// (apphttp.SchemeHost drops the PATH where the rsskey lives; apphttp.RedactURLError rebuilds
+// the cause host-only). The caller owns the returned body.
 func (d *driver) get(ctx context.Context, rawurl string) (*stdhttp.Response, error) {
 	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, rawurl, nil)
 	if err != nil {
-		// The URL embeds the rsskey in its path, so it is scrubbed rather than echoed.
-		return nil, fmt.Errorf("beyondhd: build download request: %s", d.scrubSecrets(err.Error()))
+		return nil, fmt.Errorf("beyondhd: build download request: %w", apphttp.RedactURLError(err))
 	}
 	resp, err := d.doer.Do(req)
 	if err != nil {
-		// A transport error may quote the URL (rsskey in the path); scrub it. The caller's
-		// sanitizeGrabError still collapses this to a fixed message for non-sentinel errors.
-		return nil, fmt.Errorf("beyondhd: download request failed: %s", d.scrubSecrets(err.Error()))
+		return nil, fmt.Errorf("beyondhd: request to %s: %w", apphttp.SchemeHost(rawurl), apphttp.RedactURLError(err))
 	}
 	return resp, nil
 }
