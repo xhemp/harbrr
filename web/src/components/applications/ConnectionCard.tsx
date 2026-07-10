@@ -53,18 +53,18 @@ export function ConnectionCard({ conn, syncing, actions }: {
           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{conn.syncLevel === "full" ? "full sync" : "add/update"}</Badge>
           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{conn.indexScope === "all" ? "all indexers" : "selected"}</Badge>
           {stalePort !== null && (
-            <Badge variant="outline" className="flex items-center gap-1 px-1.5 py-0 text-[11px] text-warn">
-              port may be outdated
-              <button
-                type="button"
-                aria-label={`Update ${conn.name}'s harbrr URL port to ${stalePort}`}
-                title={`URL uses port ${storedPort}; harbrr's configured port is ${stalePort} — review and update`}
-                className="inline-flex items-center"
-                onClick={() => actions.onFixPort(conn, withPort(conn.harbrrUrl, stalePort))}
-              >
+            <button
+              type="button"
+              aria-label={`Update ${conn.name}'s harbrr URL port to ${stalePort}`}
+              title={`URL uses port ${storedPort}; harbrr's configured port is ${stalePort} — review and update`}
+              className="cursor-pointer"
+              onClick={() => actions.onFixPort(conn, withPort(conn.harbrrUrl, stalePort))}
+            >
+              <Badge variant="outline" className="flex items-center gap-1 px-1.5 py-0 text-[11px] text-warn hover:bg-warn/10">
+                port may be outdated
                 <RefreshCcw className="h-3 w-3" />
-              </button>
-            </Badge>
+              </Badge>
+            </button>
           )}
         </div>
         <div className="flex items-center gap-2 text-[12px] text-faint">
