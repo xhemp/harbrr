@@ -251,7 +251,7 @@ function IndexerPicker({ slugs, selected, onChange }: {
             <>
               <DropdownMenuCheckboxItem
                 checked={selected === null}
-                onCheckedChange={(checked) => onChange(checked ? null : new Set(slugs))}
+                onCheckedChange={(checked) => onChange(checked ? null : new Set())}
                 onSelect={(e) => e.preventDefault()}
               >
                 All
