@@ -20,6 +20,7 @@ import {
   useTestAllIndexers,
   useTestIndexer
 } from "@/hooks/useIndexers"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { APIError } from "@/lib/api"
 import { getBaseUrl } from "@/lib/base-url"
 import { copyText } from "@/lib/clipboard"
@@ -77,46 +78,40 @@ function IndexersPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border px-7">
-        <div className="flex flex-col">
-          <h1 className="text-[15px] font-semibold leading-tight tracking-tight">Indexers</h1>
-          <p className="text-[12px] text-faint">{total} configured · {healthy} healthy</p>
+      <PageHeader title="Indexers" subtitle={`${total} configured · ${healthy} healthy`}>
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+          <Input
+            className="h-9 w-56 pl-8"
+            placeholder="Filter indexers"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
         </div>
-        <div className="ml-auto flex items-center gap-2.5">
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-            <Input
-              className="h-9 w-56 pl-8"
-              placeholder="Filter indexers"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
-          <Button
-            variant="outline"
-            disabled={testAll.isPending || total === 0}
-            onClick={() => testAll.mutate(slugs, {
-              onSuccess: (results) => {
-                const passed = results.filter((r) => r.ok).length
-                const failed = results.length - passed
-                if (results.some((r) => isAuthStatus(r.status))) {
-                  toast.error(AUTH_FAILED_MSG)
-                } else if (failed === 0) {
-                  toast.success(`All ${results.length} indexers passed`)
-                } else {
-                  toast.warning(`${passed} passed, ${failed} failed`)
-                }
-              },
-              onError: () => toast.error("Test all failed"),
-            })}
-          >
-            <FlaskConical className="h-4 w-4" /> {testAll.isPending ? "Testing…" : "Test all"}
-          </Button>
-          <Button onClick={() => setSheet({ open: true, mode: "create" })}>
-            <Plus className="h-4 w-4" /> Add indexer
-          </Button>
-        </div>
-      </header>
+        <Button
+          variant="outline"
+          disabled={testAll.isPending || total === 0}
+          onClick={() => testAll.mutate(slugs, {
+            onSuccess: (results) => {
+              const passed = results.filter((r) => r.ok).length
+              const failed = results.length - passed
+              if (results.some((r) => isAuthStatus(r.status))) {
+                toast.error(AUTH_FAILED_MSG)
+              } else if (failed === 0) {
+                toast.success(`All ${results.length} indexers passed`)
+              } else {
+                toast.warning(`${passed} passed, ${failed} failed`)
+              }
+            },
+            onError: () => toast.error("Test all failed"),
+          })}
+        >
+          <FlaskConical className="h-4 w-4" /> {testAll.isPending ? "Testing…" : "Test all"}
+        </Button>
+        <Button onClick={() => setSheet({ open: true, mode: "create" })}>
+          <Plus className="h-4 w-4" /> Add indexer
+        </Button>
+      </PageHeader>
 
       <div className="min-h-0 flex-1 overflow-auto px-7 py-6">
         {indexers.isError && <LoadError what="indexers" />}

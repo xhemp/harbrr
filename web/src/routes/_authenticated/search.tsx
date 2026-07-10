@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { ChevronDown, Search as SearchIcon } from "lucide-react"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { sortRows, type SearchRow, type Sort, type SortKey } from "@/components/search/search-sort"
 import { SearchResultsTable } from "@/components/search/SearchResultsTable"
 import { Button } from "@/components/ui/button"
@@ -91,12 +92,7 @@ function SearchPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border px-7">
-        <div className="flex flex-col">
-          <h1 className="text-[15px] font-semibold leading-tight tracking-tight">Search</h1>
-          <p className="text-[12px] text-faint">Manual search across {active.length} of {enabled.length} enabled indexers</p>
-        </div>
-      </header>
+      <PageHeader title="Search" subtitle={`Manual search across ${active.length} of ${enabled.length} enabled indexers`} />
 
       <div className="min-h-0 flex-1 overflow-auto px-7 py-6">
         <form

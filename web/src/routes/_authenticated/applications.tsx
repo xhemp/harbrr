@@ -9,6 +9,7 @@ import { SelectIndexersDialog } from "@/components/applications/SelectIndexersDi
 import { StatusDrawer } from "@/components/applications/StatusDrawer"
 import { SyncProfilesSection } from "@/components/applications/SyncProfilesSection"
 import { SyncReportView } from "@/components/applications/SyncReportView"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -71,28 +72,22 @@ function ApplicationsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border px-7">
-        <div className="flex flex-col">
-          <h1 className="text-[15px] font-semibold leading-tight tracking-tight">Applications</h1>
-          <p className="text-[12px] text-faint">{total} connected · indexers sync into each app automatically</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2.5">
-          <Button
-            variant="outline"
-            disabled={syncAll.isPending || total === 0}
-            onClick={() => syncAll.mutate(undefined, {
-              onSuccess: setAllReports,
-              onError: () => toast.error("Sync all failed"),
-            })}
-          >
-            <RefreshCw className={syncAll.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-            {syncAll.isPending ? "Syncing…" : "Sync all"}
-          </Button>
-          <Button onClick={() => setDialog({ open: true })}>
-            <Plus className="h-4 w-4" /> Add application
-          </Button>
-        </div>
-      </header>
+      <PageHeader title="Applications" subtitle={`${total} connected · indexers sync into each app automatically`}>
+        <Button
+          variant="outline"
+          disabled={syncAll.isPending || total === 0}
+          onClick={() => syncAll.mutate(undefined, {
+            onSuccess: setAllReports,
+            onError: () => toast.error("Sync all failed"),
+          })}
+        >
+          <RefreshCw className={syncAll.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          {syncAll.isPending ? "Syncing…" : "Sync all"}
+        </Button>
+        <Button onClick={() => setDialog({ open: true })}>
+          <Plus className="h-4 w-4" /> Add application
+        </Button>
+      </PageHeader>
 
       <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-auto px-7 py-6">
         {connections.isError && <LoadError what="app connections" />}
