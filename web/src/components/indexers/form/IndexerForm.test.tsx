@@ -46,6 +46,7 @@ const EXISTING: InstanceDetail = {
   definitionId: "testtracker",
   name: "TT",
   enabled: true,
+  protocol: "torrent",
   proxyId: null,
   solverId: null,
   createdAt: "2026-07-01T00:00:00Z",

@@ -91,6 +91,7 @@ function makeIndexer(overrides: Partial<Instance> = {}): Instance {
     definitionId: "myanonamouse",
     name: "MyAnonamouse",
     enabled: true,
+    protocol: "torrent",
     proxyId: null,
     solverId: null,
     createdAt: "2026-01-01T00:00:00Z",
