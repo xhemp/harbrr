@@ -56,7 +56,7 @@ export function ConnectionCard({ conn, syncing, actions }: {
             {conn.syncLevel === "full" ? "full sync" : "add/update"}
           </Badge>
           <Badge variant="outline" className={cn("px-1.5 py-0 text-[11px]", conn.indexScope === "all" && "border-brand/40 bg-brand/10 text-brand")}>
-            {conn.indexScope === "all" ? "all indexers" : "selected"}
+            {conn.indexScope === "all" ? "all compatible" : "selected"}
           </Badge>
           {stalePort !== null && (
             <button
