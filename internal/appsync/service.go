@@ -113,10 +113,12 @@ func (s *Service) CreateConnection(ctx context.Context, p CreateConnectionParams
 	if err := validateCreate(&p); err != nil {
 		return domain.AppConnection{}, err
 	}
+	// Advisory pre-check so an ordinary invalid profile ref fails before the key
+	// mint below has side effects; the authoritative, race-proof check runs again
+	// inside insertConnection's transaction.
 	if err := s.validateProfileRef(ctx, s.db, p.Kind, p.SyncProfileID); err != nil {
 		return domain.AppConnection{}, err
 	}
-
 	plaintext, key, err := s.minter.MintAPIKey(ctx, "app-sync: "+p.Name)
 	if err != nil {
 		return domain.AppConnection{}, fmt.Errorf("appsync: mint connection key: %w", err)
@@ -143,6 +145,13 @@ func (s *Service) insertConnection(ctx context.Context, p CreateConnectionParams
 		return domain.AppConnection{}, fmt.Errorf("appsync: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Validate the profile ref against this same transaction (not the bare s.db
+	// handle), so a concurrent profile delete or category-narrow can't slip between
+	// the check and the insert below (the UpdateConnection precedent).
+	if err := s.validateProfileRef(ctx, tx, p.Kind, p.SyncProfileID); err != nil {
+		return domain.AppConnection{}, err
+	}
 
 	now := s.clock()
 	conn := domain.AppConnection{
@@ -268,9 +277,6 @@ func (s *Service) UpdateConnection(ctx context.Context, id int64, p UpdateConnec
 // "selected" subset): the given instances become selected, every other currently
 // selected one is cleared. Applied in one transaction.
 func (s *Service) SetSelectedIndexers(ctx context.Context, id int64, instanceIDs []int64) error {
-	if _, err := s.repo.GetConnection(ctx, s.db, id); err != nil {
-		return fmt.Errorf("appsync: get connection: %w", err)
-	}
 	if err := s.validateInstanceIDs(ctx, instanceIDs); err != nil {
 		return err
 	}
@@ -279,6 +285,15 @@ func (s *Service) SetSelectedIndexers(ctx context.Context, id int64, instanceIDs
 		return fmt.Errorf("appsync: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Read the connection inside the writing transaction (the UpdateConnection
+	// precedent), so a concurrent delete can't slip between the existence check and
+	// the selection writes and surface as an FK fault instead of a clean not-found.
+	// The instance-ids check above stays advisory — the indexer source isn't
+	// tx-scoped — with the selection FKs as the authoritative guard.
+	if _, err := s.repo.GetConnection(ctx, tx, id); err != nil {
+		return fmt.Errorf("appsync: get connection: %w", err)
+	}
 
 	want := make(map[int64]bool, len(instanceIDs))
 	for _, instID := range instanceIDs {

@@ -262,6 +262,12 @@ export class ApiClient {
     return this.requestAbsolute("/healthz")
   }
 
+  // getServerInfo reflects the live config.ServerConfig.Port, used to detect
+  // app-sync connections whose stored harbrrUrl port has gone stale.
+  getServerInfo(): Promise<{ port: number }> {
+    return this.request("/server-info")
+  }
+
   changePassword(currentPassword: string, newPassword: string): Promise<void> {
     return this.request("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } })
   }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/autobrr/harbrr/internal/domain"
 )
 
 // TestUpdateConnectionProfileTOCTOU pins the transactional read-modify-write in
@@ -70,6 +72,88 @@ func TestUpdateConnectionProfileTOCTOU(t *testing.T) {
 		}
 		if conn.SyncProfileID == nil || *conn.SyncProfileID != tv.ID {
 			continue // the narrow won; the attach was correctly rejected
+		}
+		prof, err := f.svc.GetProfile(ctx, tv.ID)
+		if err != nil {
+			t.Fatalf("iter %d: GetProfile: %v", i, err)
+		}
+		if !profileOverlapsKind(conn.Kind, prof.Categories) {
+			t.Fatalf("iter %d: empty-gate TOCTOU: %s connection references profile with categories %v (no overlap)",
+				i, conn.Kind, prof.Categories)
+		}
+	}
+}
+
+// TestCreateConnectionProfileTOCTOU pins the same TOCTOU close as
+// TestUpdateConnectionProfileTOCTOU, but for CreateConnection: attaching a profile at
+// creation time races a concurrent narrow of that profile's categories. Before the fix,
+// CreateConnection validated the profile ref against a bare, out-of-transaction read
+// (s.db) and insertConnection then opened its own separate transaction to write the row
+// — leaving a window where a concurrent narrow could land between the validate and the
+// write, producing a full-sync connection persisted against a profile with no
+// overlapping categories. The invariant asserted here is exactly that impossible state:
+// if a connection is created referencing the profile, the profile must still overlap
+// the connection's kind. Runs many fresh interleavings under -race.
+func TestCreateConnectionProfileTOCTOU(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for i := range 40 {
+		f := newSyncFixture(t)
+
+		// A TV profile the new Sonarr connection can consume — but not yet attached, so
+		// the narrow's in-use guard passes at the moment the goroutines start.
+		tv, err := f.svc.CreateProfile(ctx, CreateProfileParams{Name: "tv", Categories: []int{5000}})
+		if err != nil {
+			t.Fatalf("iter %d: CreateProfile: %v", i, err)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		// Create a second Sonarr connection attached to the profile. The only legitimate
+		// outcomes are success or an ErrInvalid rejection (e.g. the narrow won and the ref
+		// no longer overlaps) — anything else is an unexpected DB/FK fault masquerading
+		// as "the narrow won" below.
+		var created domain.AppConnection
+		var createErr error
+		go func() {
+			defer wg.Done()
+			created, createErr = f.svc.CreateConnection(ctx, CreateConnectionParams{
+				Name:          fmt.Sprintf("Sonarr-2-%d", i),
+				Kind:          domain.AppKindSonarr,
+				BaseURL:       fmt.Sprintf("http://sonarr-2-%d.example", i),
+				APIKey:        "app-key-2",
+				HarbrrURL:     "http://harbrr:8787",
+				SyncProfileID: &tv.ID,
+			})
+		}()
+		// Narrow the profile to books-only, which no Sonarr connection can consume.
+		// Likewise, only success or ErrInvalid (validateProfileInUse rejecting the narrow
+		// because the create already landed) are legitimate.
+		var narrowErr error
+		go func() {
+			defer wg.Done()
+			books := []int{7000}
+			narrowErr = f.svc.UpdateProfile(ctx, tv.ID, UpdateProfileParams{Categories: &books})
+		}()
+		wg.Wait()
+
+		if createErr != nil && !errors.Is(createErr, ErrInvalid) {
+			t.Fatalf("iter %d: create: unexpected non-ErrInvalid error: %v", i, createErr)
+		}
+		if narrowErr != nil && !errors.Is(narrowErr, ErrInvalid) {
+			t.Fatalf("iter %d: narrow: unexpected non-ErrInvalid error: %v", i, narrowErr)
+		}
+		if createErr != nil {
+			continue // the narrow won; the create was correctly rejected
+		}
+
+		conn, err := f.svc.GetConnection(ctx, created.ID)
+		if err != nil {
+			t.Fatalf("iter %d: GetConnection: %v", i, err)
+		}
+		if conn.SyncProfileID == nil || *conn.SyncProfileID != tv.ID {
+			continue // the narrow won; the connection is not attached
 		}
 		prof, err := f.svc.GetProfile(ctx, tv.ID)
 		if err != nil {

@@ -61,6 +61,10 @@ type Config struct {
 	IPAllowlist []string
 	// TrustedProxies are peers whose X-Forwarded-For is honored for the allowlist.
 	TrustedProxies []string
+	// Port is the live effective listening port (config.ServerConfig.Port), surfaced
+	// via /api/server-info so the frontend can flag app-sync connections whose stored
+	// HarbrrURL was baked in against a since-changed port.
+	Port int
 }
 
 // router holds the management API's dependencies and resolved config.
@@ -191,15 +195,6 @@ func (rt *router) routes() http.Handler {
 			r.Post("/api/announce-connections/{id}/enable", rt.enableAnnounceConnection)
 			r.Post("/api/announce-connections/{id}/disable", rt.disableAnnounceConnection)
 
-			r.Get("/api/notifications", rt.listNotifications)
-			r.Post("/api/notifications", rt.createNotification)
-			r.Get("/api/notifications/{id}", rt.getNotification)
-			r.Patch("/api/notifications/{id}", rt.updateNotification)
-			r.Delete("/api/notifications/{id}", rt.deleteNotification)
-			r.Post("/api/notifications/{id}/enable", rt.enableNotification)
-			r.Post("/api/notifications/{id}/disable", rt.disableNotification)
-			r.Post("/api/notifications/{id}/test", rt.testNotification)
-
 			rt.mountResourceRoutes(r)
 
 			r.Get("/api/cache/stats", rt.cacheStats)
@@ -209,15 +204,26 @@ func (rt *router) routes() http.Handler {
 
 			r.Get("/api/config/log-level", rt.getLogLevel)
 			r.Put("/api/config/log-level", rt.putLogLevel)
+
+			r.Get("/api/server-info", rt.serverInfo)
 		})
 	})
 	return r
 }
 
 // mountResourceRoutes registers the CRUD routes for the global proxy + anti-bot-solver
-// resources an indexer references by id. Split out of routes() to keep that function
-// under the funlen gate.
+// resources an indexer references by id, plus notifications. Split out of routes() to
+// keep that function under the funlen gate.
 func (rt *router) mountResourceRoutes(r chi.Router) {
+	r.Get("/api/notifications", rt.listNotifications)
+	r.Post("/api/notifications", rt.createNotification)
+	r.Get("/api/notifications/{id}", rt.getNotification)
+	r.Patch("/api/notifications/{id}", rt.updateNotification)
+	r.Delete("/api/notifications/{id}", rt.deleteNotification)
+	r.Post("/api/notifications/{id}/enable", rt.enableNotification)
+	r.Post("/api/notifications/{id}/disable", rt.disableNotification)
+	r.Post("/api/notifications/{id}/test", rt.testNotification)
+
 	r.Get("/api/proxies", rt.listProxies)
 	r.Post("/api/proxies", rt.createProxy)
 	r.Get("/api/proxies/{id}", rt.getProxy)

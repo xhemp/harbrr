@@ -1,4 +1,4 @@
-import { ListChecks, MoreVertical, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { ListChecks, MoreVertical, Pencil, RefreshCcw, RefreshCw, Trash2 } from "lucide-react"
 import { SyncError } from "@/components/applications/SyncError"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,8 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
+import { useServerInfo } from "@/hooks/useAppConnections"
+import { explicitUrlPort, withPort } from "@/lib/base-url"
 import { hostname, relativeTime, syncStatusClass } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { AppConnection } from "@/types/api"
@@ -22,6 +24,7 @@ export type ConnectionActions = {
   onDelete: (conn: AppConnection) => void
   onStatus: (id: number) => void
   onSelectIndexers: (conn: AppConnection) => void
+  onFixPort: (conn: AppConnection, harbrrUrl: string) => void
 }
 
 export function ConnectionCard({ conn, syncing, actions }: {
@@ -29,6 +32,17 @@ export function ConnectionCard({ conn, syncing, actions }: {
   syncing?: boolean
   actions: ConnectionActions
 }) {
+  const serverInfo = useServerInfo()
+  const livePort = serverInfo.data?.port
+  const storedPort = explicitUrlPort(conn.harbrrUrl)
+  // Only a URL that names a port outright is comparable against harbrr's own
+  // listen port: a reverse-proxied URL (the common case defaultHarbrrUrl's
+  // window.location.origin prefill produces behind a TLS-terminating proxy)
+  // has no explicit port and explicitUrlPort returns null for it. Even an
+  // explicit differing port can be a deliberate Docker port mapping, so the
+  // badge is advisory and the fix goes through a confirm dialog upstream.
+  const stalePort = livePort !== undefined && storedPort !== null && storedPort !== livePort ? livePort : null
+
   return (
     <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -38,6 +52,20 @@ export function ConnectionCard({ conn, syncing, actions }: {
           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{conn.freeleechMode === "bypass" ? "FL bypass" : "FL honor"}</Badge>
           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{conn.syncLevel === "full" ? "full sync" : "add/update"}</Badge>
           <Badge variant="outline" className="px-1.5 py-0 text-[11px]">{conn.indexScope === "all" ? "all indexers" : "selected"}</Badge>
+          {stalePort !== null && (
+            <button
+              type="button"
+              aria-label={`Update ${conn.name}'s harbrr URL port to ${stalePort}`}
+              title={`URL uses port ${storedPort}; harbrr's configured port is ${stalePort} — review and update`}
+              className="cursor-pointer"
+              onClick={() => actions.onFixPort(conn, withPort(conn.harbrrUrl, stalePort))}
+            >
+              <Badge variant="outline" className="flex items-center gap-1 px-1.5 py-0 text-[11px] text-warn hover:bg-warn/10">
+                port may be outdated
+                <RefreshCcw className="h-3 w-3" />
+              </Badge>
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 text-[12px] text-faint">
           <span>{hostname(conn.baseUrl)}</span>

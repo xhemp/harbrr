@@ -1385,6 +1385,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Proxy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
@@ -1413,6 +1414,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
       responses:
         "204": { description: deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1463,6 +1465,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Solver" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
@@ -1491,6 +1494,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
       responses:
         "204": { description: deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1542,6 +1546,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SyncProfile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
@@ -1572,6 +1577,7 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
       responses:
         "204": { description: deleted }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -1709,6 +1715,24 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+
+  /api/server-info:
+    get:
+      summary: Get the server's effective listening port
+      description: >
+        Returns the live, configured listening port (not anything derived from the
+        inbound request), so the frontend can flag app-sync connections whose stored
+        HarbrrURL was baked in against a since-changed port.
+      operationId: getServerInfo
+      tags: [System]
+      security: [{ session: [] }, { apiKey: [] }]
+      responses:
+        "200":
+          description: the effective server info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServerInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
 components:
   securitySchemes:
@@ -2415,6 +2439,15 @@ components:
           enum: [trace, debug, info, warn, error]
           description: the log level applied across every subsystem
       required: [level]
+
+    ServerInfo:
+      type: object
+      description: The server's live effective listening configuration.
+      properties:
+        port:
+          type: integer
+          description: the configured listening port harbrr is currently bound to
+      required: [port]
 
     CacheConfig:
       type: object
