@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 )
@@ -18,7 +19,7 @@ func builderDriver(cfg map[string]string) *driver {
 	if cfg == nil {
 		cfg = map[string]string{}
 	}
-	return &driver{cfg: cfg, baseURL: "https://mam.test/", clock: fixedClock}
+	return &driver{def: &loader.Definition{ID: "myanonamouse"}, cfg: cfg, baseURL: "https://mam.test/", clock: fixedClock}
 }
 
 // TestBuildSearchURL is the parity gate for the request: it asserts the exact query
