@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**595 trackers** total: 556 Cardigann corpus (all built) · 18 native drivers built · 21 native
+**593 trackers** total: 554 Cardigann corpus (all built) · 18 native drivers built · 21 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -32,7 +32,7 @@ Bespoke code in Jackett/Prowlarr (no Cardigann definition); harbrr ships native 
 | Redacted | Gazelle (cookie/key → ajax.php) | ✅ | ⬜ |
 | Orpheus | Gazelle (cookie/key → ajax.php) | ✅ | ⬜ |
 | BroadcastTheNet | Bespoke API | ✅ | ✅ |
-| PassThePopcorn | Bespoke API | ✅ | ⬜ |
+| PassThePopcorn | Bespoke API | ✅ | ✅ |
 | GazelleGames | Bespoke API | ✅ | ⬜ |
 | AnimeBytes | Bespoke API | ✅ | ⬜ |
 | Usenet (Newznab) | Generic Newznab | ✅ | ✅ |
@@ -70,7 +70,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (406)
+### Private (407)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -158,7 +158,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | cyanbug (大青虫) | ✅ | ⬜ |
 | CyclingArchiveClub | ✅ | ⬜ |
 | CZTeam (API) | ✅ | ⬜ |
-| Darkpeers (API) | ✅ | ⬜ |
+| Darkpeers (API) | ✅ | ✅ |
 | Das Unerwartete | ✅ | ⬜ |
 | Das Unerwartete (API) | ✅ | ⬜ |
 | DataScene (API) | ✅ | ⬜ |
@@ -241,7 +241,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Hǎitáng (海棠PT) | ✅ | ⬜ |
 | Immortuos | ✅ | ⬜ |
 | Indietorrents | ✅ | ⬜ |
-| INFINITY (API) | ✅ | ⬜ |
 | InfinityHD (API) | ✅ | ⬜ |
 | Infire | ✅ | ⬜ |
 | Insane Tracker | ✅ | ⬜ |
@@ -340,6 +339,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | PT GTK | ✅ | ⬜ |
 | PTCafe (咖啡) | ✅ | ⬜ |
 | PTCC (我的PT) | ✅ | ⬜ |
+| PTCDY (传道院) | ✅ | ⬜ |
 | PTerClub (PT之友俱乐部) | ✅ | ⬜ |
 | PTFans | ✅ | ⬜ |
 | PTFiles | ✅ | ⬜ |
@@ -438,7 +438,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | TorrentClaw | ✅ | ⬜ |
 | TorrentDD | ✅ | ⬜ |
 | Torrenteros (API) | ✅ | ⬜ |
-| TorrentHR | ✅ | ⬜ |
+| TorrentHR (API) | ✅ | ⬜ |
 | Torrenting | ✅ | ⬜ |
 | TorrentLeech | ✅ | ✅ |
 | Torrentleech.pl | ✅ | ⬜ |
@@ -461,6 +461,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Upscale Vault (API) | ✅ | ⬜ |
 | UTOPIA (API) | ✅ | ⬜ |
 | Vault network | ✅ | ⬜ |
+| VC-Lib | ✅ | ⬜ |
 | VietMediaF | ✅ | ⬜ |
 | White Angel | ✅ | ⬜ |
 | WinterSakura | ✅ | ⬜ |
@@ -548,7 +549,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | UzTracker | ✅ | ⬜ |
 | Ztracker | ✅ | ⬜ |
 
-### Public (88)
+### Public (85)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -558,13 +559,11 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | ACG.RIP | ✅ | ⬜ |
 | AniRena | ✅ | ⬜ |
 | AniSource | ✅ | ⬜ |
-| arab-torrents.com | ✅ | ⬜ |
 | Bangumi Moe | ✅ | ⬜ |
 | BigFANGroup | ✅ | ⬜ |
 | BlueRoms | ✅ | ⬜ |
 | BT.etree | ✅ | ⬜ |
 | BTdirectory | ✅ | ⬜ |
-| btstate | ✅ | ⬜ |
 | Byrutor | ✅ | ⬜ |
 | Catorrent | ✅ | ⬜ |
 | CrackingPatching | ✅ | ⬜ |
@@ -626,7 +625,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | TorrentGalaxyClone | ✅ | ⬜ |
 | TorrentKitty | ✅ | ⬜ |
 | TorrentProject2 | ✅ | ⬜ |
-| TorrentQQ | ✅ | ⬜ |
 | Torrentsome | ✅ | ⬜ |
 | Torrenttip | ✅ | ⬜ |
 | U2P | ✅ | ⬜ |

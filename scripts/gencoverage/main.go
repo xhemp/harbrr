@@ -31,9 +31,10 @@ var liveTested = map[string]bool{
 	"aura4k-api": true, "digitalcore-api": true, "hdspace": true, "lst": true,
 	"luminarr-api": true, "onlyencodes-api": true, "racing4everyone-api": true, "reelflix-api": true,
 	"retromoviesclub-api": true, "torrentleech": true, "yuscene-api": true, "racingforme": true,
-	"seedpool-api": true, "uploadcx": true,
+	"seedpool-api": true, "uploadcx": true, "darkpeers-api": true,
 	// Native drivers, live-validated.
 	"iptorrents": true, "filelist": true, "myanonamouse": true, "broadcastthenet": true,
+	"passthepopcorn": true,
 	// Usenet, live-validated against the deployed fix build (differential 100=100 vs
 	// Prowlarr): the generic Newznab driver via the dognzb preset (search + a real .nzb
 	// grab through /dl), and the NZBIndex native driver (search).
