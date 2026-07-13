@@ -161,35 +161,75 @@ func (h *handler) serveDL(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, codeBadParameter, "Indexer is not supported")
 		return
 	}
-	if h.dlToken == nil {
+	ServeGrab(w, r, idx, h.dlToken, h.log, q.Get("token"), torznabGrabError)
+}
+
+// ErrorWriter renders a ServeGrab failure in the caller's error contract: the feed
+// /dl proxy answers in Torznab XML (torznabGrabError), the management route in the
+// api package's JSON envelope. msg is always generic and secret-free.
+type ErrorWriter func(w http.ResponseWriter, status int, msg string)
+
+// torznabGrabError is serveDL's ErrorWriter. Torznab codes derive from the status:
+// 500 is the internal-error document (900), the serve-boundary 404 mirrors Jackett's
+// plain-text NotFound (not an <error> doc), everything else is a bad parameter (201).
+func torznabGrabError(w http.ResponseWriter, status int, msg string) {
+	switch status {
+	case http.StatusInternalServerError:
+		writeError(w, status, codeUnknownError, msg)
+	case http.StatusNotFound:
+		http.Error(w, msg, status)
+	default:
+		writeError(w, status, codeBadParameter, msg)
+	}
+}
+
+// ServeGrab is the shared resolve-and-stream core behind both the apikey-gated feed
+// /dl proxy (serveDL) and the session-authed management download route
+// (GET /api/indexers/{slug}/download/{token}). It decodes the opaque token into the
+// pre-resolution link (bound to idx — a token minted for another indexer fails the AAD
+// check), grabs the release through harbrr's own session, and streams the
+// .torrent/.nzb bytes back — or 302s a resolved magnet, so a passkey-bearing link is
+// never exposed. The CALLER authorizes before calling (the feed by apikey; the
+// management route by session cookie or X-API-Key) and supplies the ErrorWriter that
+// renders failures in its own contract (Torznab XML vs JSON). Every failure is
+// generic; the link/passkey never reaches a log, error body, or redirect. A nil
+// keyring means the proxy is disabled -> 503.
+//
+// The decoded link is trusted because the token is AEAD-authenticated under the keyring
+// (only harbrr could mint it) and the endpoint is auth-gated. In plaintext mode (no key,
+// opt-in behind a loud startup warning) the token is not authenticated, so a forged
+// base64url(link) is accepted — a known SSRF already accepted by the plaintext threat
+// model (which also accepts recoverable-at-rest secrets). Note the management route is a
+// CSRF-exempt GET reached with a SameSite=Lax session cookie, so in plaintext mode that
+// SSRF is additionally reachable via an admin's ambient session; encrypted mode (the
+// default) forecloses it — a token cannot be forged. We do not host-filter the link: a
+// self-hosted operator may run a private/LAN tracker, so a filter would break legitimate
+// setups for little gain.
+func ServeGrab(w http.ResponseWriter, r *http.Request, idx Indexer, dlToken *secrets.Keyring, log zerolog.Logger, token string, errw ErrorWriter) {
+	if dlToken == nil {
 		// No direct Jackett equivalent (Jackett always has download): the proxy feature
 		// is unavailable, so 503 Service Unavailable.
-		writeError(w, http.StatusServiceUnavailable, codeBadParameter, "download proxy is not enabled")
+		errw(w, http.StatusServiceUnavailable, "download proxy is not enabled")
 		return
 	}
-	link, err := decodeDLToken(h.dlToken, idx.Info().ID, q.Get("token"))
+	link, err := decodeDLToken(dlToken, idx.Info().ID, token)
 	if err != nil {
 		// The error never carries the link; an invalid/forged token is a bad request.
-		writeError(w, http.StatusBadRequest, codeBadParameter, "invalid download token")
+		errw(w, http.StatusBadRequest, "invalid download token")
 		return
 	}
-	// The decoded link is trusted because the token is AEAD-authenticated under the
-	// keyring (so only harbrr could mint it) and the endpoint is apikey-gated. In
-	// plaintext mode (no key, opt-in behind a loud startup warning) the token is not
-	// authenticated, so an apikey-holder could forge one for an arbitrary host — a
-	// known, gated SSRF. We do not host-filter the link here: a self-hosted operator
-	// may run a private/LAN tracker, and the attacker is already an apikey-holder on
-	// single-user software, so a filter would break legitimate setups for little gain.
 	result, err := idx.Grab(r.Context(), link)
 	if err != nil {
-		h.writeInternalError(w, "grab", idx.Info().ID, err)
+		logInternalError(log, "grab", idx.Info().ID, err)
+		errw(w, http.StatusInternalServerError, internalErrorMsg)
 		return
 	}
 	if result.Redirect != "" {
 		// Only a magnet (public, no secret) is ever redirected. Guard so a resolved
 		// http(s) link can never become an open redirect or leak a passkey in Location.
 		if !strings.HasPrefix(result.Redirect, "magnet:") {
-			h.writeInternalError(w, "grab", idx.Info().ID, errors.New("grab returned a non-magnet redirect"))
+			logInternalError(log, "grab", idx.Info().ID, errors.New("grab returned a non-magnet redirect"))
+			errw(w, http.StatusInternalServerError, internalErrorMsg)
 			return
 		}
 		http.Redirect(w, r, result.Redirect, http.StatusFound) //nolint:gosec // G710: validated magnet: URI above, not a web open-redirect
@@ -203,20 +243,30 @@ func (h *handler) serveDL(w http.ResponseWriter, r *http.Request) {
 	// bencoded dictionary before it is served as a .torrent. When the session has
 	// expired, the .torrent fetch 302s to the login page and the client follows it
 	// (deliberate, matching Jackett), so the login-page HTML can come back with HTTP
-	// 200 — refuse to hand that to *arr as a .torrent. Jackett runs BencodeParser.Parse
-	// on the bytes and returns 404 on failure; we mirror that. This gates on the torrent
-	// content type only: a magnet is the Redirect branch above, and a usenet .nzb (served
-	// as application/x-nzb) is XML, not bencode — neither is bencode-checked.
+	// 200 — refuse to hand that to a consumer as a .torrent. Jackett runs
+	// BencodeParser.Parse on the bytes and returns 404 on failure; we mirror that. This
+	// gates on the torrent content type only: a magnet is the Redirect branch above, and
+	// a usenet .nzb (served as application/x-nzb) is XML, not bencode — neither is
+	// bencode-checked.
 	if ct == torrentContentType && !isBencodeTorrent(result.Body) {
-		h.log.Warn().
+		log.Warn().
 			Str("stage", "grab").
 			Str("indexer", idx.Info().ID).
 			Int("bytes", len(result.Body)).
 			Msg("grab produced a non-torrent body (likely an expired session); refusing to serve it as a .torrent")
-		http.Error(w, "requested torrent is not available", http.StatusNotFound)
+		errw(w, http.StatusNotFound, "requested torrent is not available")
 		return
 	}
 	w.Header().Set("Content-Type", ct)
+	// Give the browser a sensible download filename. The web UI navigates to this route
+	// directly, and the URL's last segment is an opaque token, so without this the file
+	// would save under the token with no .torrent/.nzb extension. *arr ignores it (it
+	// parses the body), so sharing this with the feed /dl proxy is harmless.
+	ext := ".torrent"
+	if ct != torrentContentType {
+		ext = ".nzb"
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+idx.Info().ID+ext+"\"")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(result.Body) //nolint:gosec // G705: torrent file served as application/x-bittorrent, fixed non-HTML content type
 }
@@ -489,10 +539,25 @@ func (h *handler) selfURL(r *http.Request) string {
 // which mangles a multi-clause error message — sorting/merging the URL's params
 // and percent-encoding the prose — into unreadable garbage.)
 func (h *handler) writeInternalError(w http.ResponseWriter, stage, indexerID string, err error) {
-	h.log.Error().
+	writeInternalErrorLog(w, h.log, stage, indexerID, err)
+}
+
+// writeInternalErrorLog is the logger-explicit form of writeInternalError.
+func writeInternalErrorLog(w http.ResponseWriter, log zerolog.Logger, stage, indexerID string, err error) {
+	logInternalError(log, stage, indexerID, err)
+	writeError(w, http.StatusInternalServerError, codeUnknownError, internalErrorMsg)
+}
+
+// internalErrorMsg is the fixed client-facing text for any internal failure; the raw
+// error only ever reaches the (redacted) log.
+const internalErrorMsg = "internal error processing the request"
+
+// logInternalError records a failed request with the error redacted, response-free —
+// ServeGrab logs here and answers through its caller-supplied ErrorWriter.
+func logInternalError(log zerolog.Logger, stage, indexerID string, err error) {
+	log.Error().
 		Str("stage", stage).
 		Str("indexer", indexerID).
 		Str("error", apphttp.RedactError(err)).
 		Msg("torznab request failed")
-	writeError(w, http.StatusInternalServerError, codeUnknownError, "internal error processing the request")
 }
