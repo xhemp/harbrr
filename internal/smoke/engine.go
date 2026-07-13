@@ -412,10 +412,11 @@ type FieldParity struct {
 // title is then likely a different edition on each side, so field comparison is
 // skipped entirely (Windowed) rather than risk a mispaired false divergence. A
 // bounded query (see chooseQueries) keeps runs under the cap so fields are compared.
-func fieldParity(harbrr, prowlarr []Result, strict bool) FieldParity {
+func fieldParity(harbrr, prowlarr []Result, strict bool, harbrrHost string) FieldParity {
 	if len(harbrr) >= resultCap && len(prowlarr) >= resultCap {
 		return FieldParity{Windowed: true}
 	}
+	sealed := sealingActive(harbrr, harbrrHost)
 	h := uniqueByTitle(harbrr)
 	p := uniqueByTitle(prowlarr)
 	seen := make(map[string]struct{}, len(p))
@@ -435,9 +436,26 @@ func fieldParity(harbrr, prowlarr []Result, strict bool) FieldParity {
 		}
 		seen[key] = struct{}{}
 		fp.Compared++
-		fp.Divergences = append(fp.Divergences, compareFields(hu, pu, strict)...)
+		fp.Divergences = append(fp.Divergences, compareFields(hu, pu, strict, sealed)...)
 	}
 	return fp
+}
+
+// sealingActive reports whether any harbrr link points back at harbrr itself — the
+// sealed /dl proxy form. The DL rewriter is per-indexer all-or-nothing
+// (torznabhttp.NewDLRewriter is nil or rewrites every link), so one sealed link means
+// every link in this indexer's feed should be sealed; none sealed means a direct-link
+// tracker whose raw links (passkey included) are served as-is by design.
+func sealingActive(rs []Result, harbrrHost string) bool {
+	if harbrrHost == "" {
+		return false
+	}
+	for _, r := range rs {
+		if u, err := url.Parse(r.DownloadURL); err == nil && u.Host == harbrrHost {
+			return true
+		}
+	}
+	return false
 }
 
 // uniqueByTitle indexes results by normalized title, dropping any title that occurs
@@ -462,10 +480,15 @@ func uniqueByTitle(rs []Result) map[string]Result {
 	return idx
 }
 
-// compareFields runs each per-field check on one matched (harbrr, oracle) pair.
-func compareFields(h, p Result, strict bool) []FieldDivergence {
+// compareFields runs each per-field check on one matched (harbrr, oracle) pair. The
+// download-url leak check only applies when this indexer's links are sealed (see
+// downloadURLDivergence) — on a direct-link tracker a raw passkey link is by design.
+func compareFields(h, p Result, strict, sealed bool) []FieldDivergence {
 	checks := []func(h, p Result) (FieldDivergence, bool){
-		sizeDivergence, categoryDivergence, downloadURLDivergence,
+		sizeDivergence, categoryDivergence,
+	}
+	if sealed {
+		checks = append(checks, downloadURLDivergence)
 	}
 	if strict {
 		checks = append(checks, seedersDivergence, pubDateDivergence)
@@ -542,8 +565,12 @@ var downloadCredentialTokens = []string{"passkey", "torrent_pass", "authkey", "r
 
 // downloadURLDivergence flags a harbrr download link that carries a raw tracker
 // credential instead of a sealed /dl URL or magnet — both a parity defect and a
-// secret leak. The oracle side is irrelevant (Prowlarr proxies its own links); the
-// detail names only the offending param, never the URL.
+// secret leak. It runs only when sealing is active for the indexer (sealingActive):
+// feed-side the harness cannot tell "should have been sealed but leaked" from a
+// direct-link tracker's correctly-bare passkey link, so the provable defect is a raw
+// credential slipping through an ACTIVE rewriter. The oracle side is irrelevant
+// (Prowlarr proxies its own links); the detail names only the offending param, never
+// the URL.
 func downloadURLDivergence(h, _ Result) (FieldDivergence, bool) {
 	if h.DownloadURL == "" {
 		return FieldDivergence{}, false

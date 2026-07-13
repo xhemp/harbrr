@@ -55,16 +55,26 @@ func parityCheck(ctx context.Context, c *http.Client, cfg Config, ix harbrrIndex
 		f.Detail += fmt.Sprintf(" | harbrr sample: %v | prowlarr sample: %v",
 			firstTitles(harbrr, 3), firstTitles(prowlarr, 3))
 	}
-	return []Finding{f, fieldParityFinding(ix.Slug, query, harbrr, prowlarr, cfg.StrictFields)}
+	return []Finding{f, fieldParityFinding(ix.Slug, query, harbrr, prowlarr, cfg.StrictFields, hostOf(cfg.HarbrrURL))}
+}
+
+// hostOf extracts the host (with port) from a base URL, "" when unparseable — the
+// anchor sealingActive uses to recognize harbrr's own sealed /dl links.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Host
 }
 
 // fieldParityFinding builds the field-level differential finding for one indexer
 // from the already-fetched result sets. No shared titles is a SKIP; agreement across
 // every compared field is a PASS; any field divergence is a FAIL that names the
 // offending fields (secret-safe).
-func fieldParityFinding(slug, query string, harbrr, prowlarr []Result, strict bool) Finding {
+func fieldParityFinding(slug, query string, harbrr, prowlarr []Result, strict bool, harbrrHost string) Finding {
 	f := Finding{Indexer: slug, Check: CheckFieldParity}
-	fp := fieldParity(harbrr, prowlarr, strict)
+	fp := fieldParity(harbrr, prowlarr, strict, harbrrHost)
 	switch {
 	case fp.Windowed:
 		return skipFinding(f, fmt.Sprintf("q=%q both sets at the %d-result page cap (config-sorted windows; fields not comparable)", query, resultCap))

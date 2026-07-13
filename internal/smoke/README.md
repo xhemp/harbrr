@@ -79,8 +79,10 @@ data.
   legitimate 1-decimal-GB display rounding doesn't flap; a GiB-vs-GB unit bug still trips on
   releases roughly ≥ 1 GB — the 64 MiB floor makes the check lenient on smaller, e.g. music/book, releases),
   `category` (the major Torznab bucket must overlap — a movie tagged as TV fails; sub-category
-  granularity is ignored), and the harbrr **download-link shape** (must be a sealed `/dl` URL or a
-  magnet — a raw tracker `passkey`/`torrent_pass`/… link fails, as both a parity defect and a leak).
+  granularity is ignored), and the harbrr **download-link shape** — when the indexer's links are
+  sealed (any link points back at harbrr's `/dl` proxy), a raw tracker `passkey`/`torrent_pass`/…
+  link fails, as both a parity defect and a leak. A direct-link tracker (no download block, no
+  resolver) serves its bare passkey link by design and is not flagged.
 - Field comparison is **skipped** when both sides hit the 100-result page cap (the titles are
   config-sorted windows, not a stable set) — the bounded default queries keep runs under the cap.
 - **Only under `SMOKE_STRICT_FIELDS=1` (volatile):** `seeders` (presence only — harbrr must report a

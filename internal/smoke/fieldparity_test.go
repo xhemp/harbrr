@@ -14,7 +14,7 @@ func TestFieldParityMatching(t *testing.T) {
 	t.Parallel()
 	harbrr := []Result{{Title: "Alpha", Size: 100}, {Title: "Bravo", Size: 100}}
 	prowlarr := []Result{{Title: "Alpha", Size: 100}, {Title: "Charlie", Size: 100}}
-	fp := fieldParity(harbrr, prowlarr, false)
+	fp := fieldParity(harbrr, prowlarr, false, "harbrr.example")
 	if fp.Compared != 1 {
 		t.Fatalf("Compared = %d, want 1 (only Alpha is shared)", fp.Compared)
 	}
@@ -24,7 +24,7 @@ func TestFieldParityMatching(t *testing.T) {
 
 	// A title duplicated on one side is ambiguous and must not be compared.
 	dupHarbrr := []Result{{Title: "Alpha", Size: 100}, {Title: "Alpha", Size: 999}}
-	fp = fieldParity(dupHarbrr, []Result{{Title: "Alpha", Size: 100}}, false)
+	fp = fieldParity(dupHarbrr, []Result{{Title: "Alpha", Size: 100}}, false, "harbrr.example")
 	if fp.Compared != 0 {
 		t.Errorf("Compared = %d, want 0 (Alpha is ambiguous on the harbrr side)", fp.Compared)
 	}
@@ -119,6 +119,33 @@ func TestDownloadURLDivergence(t *testing.T) {
 	}
 }
 
+// TestDownloadURLSealingGate verifies the credential check only runs when this
+// indexer's links are sealed: a direct-link tracker serves its raw passkey link
+// by design (NewDLRewriter is nil there) and must not FAIL, while a raw credential
+// alongside sealed links is a genuine leak through an active rewriter.
+func TestDownloadURLSealingGate(t *testing.T) {
+	t.Parallel()
+	const rawLink = "http://tracker.example/download.php?id=42&passkey=DEADBEEF"
+	sealedLink := "https://harbrr.example/api/indexers/demo/results/torznab/dl?token=abc"
+	prowlarr := []Result{
+		{Title: "Alpha", DownloadURL: "https://prowlarr.example/1/download?apikey=x"},
+		{Title: "Bravo", DownloadURL: "https://prowlarr.example/2/download?apikey=x"},
+	}
+
+	// Direct-link tracker: every harbrr link is a bare tracker link -> no divergence.
+	direct := []Result{{Title: "Alpha", DownloadURL: rawLink}, {Title: "Bravo", DownloadURL: rawLink}}
+	if fp := fieldParity(direct, prowlarr, false, "harbrr.example"); len(fp.Divergences) != 0 {
+		t.Errorf("direct-link tracker flagged as a leak: %+v", fp.Divergences)
+	}
+
+	// Sealing active (Bravo is sealed) but Alpha slipped through raw -> divergence.
+	mixed := []Result{{Title: "Alpha", DownloadURL: rawLink}, {Title: "Bravo", DownloadURL: sealedLink}}
+	fp := fieldParity(mixed, prowlarr, false, "harbrr.example")
+	if len(fp.Divergences) != 1 || fp.Divergences[0].Field != "download-url" {
+		t.Errorf("raw link past an active rewriter not flagged: %+v", fp.Divergences)
+	}
+}
+
 func TestStrictFieldGating(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -126,11 +153,11 @@ func TestStrictFieldGating(t *testing.T) {
 	p := Result{Title: "Rel", Size: 100, Categories: []int{2000}, Seeders: intp(500), PublishDate: base}
 
 	// Non-strict: volatile divergences (seeders absent, pubDate 72h off) are NOT reported.
-	if ds := compareFields(h, p, false); len(ds) != 0 {
+	if ds := compareFields(h, p, false, true); len(ds) != 0 {
 		t.Fatalf("non-strict reported volatile divergences: %+v", ds)
 	}
 	// Strict: both the seeders and publishDate divergences surface.
-	ds := compareFields(h, p, true)
+	ds := compareFields(h, p, true, true)
 	fields := map[string]bool{}
 	for _, d := range ds {
 		fields[d.Field] = true
@@ -198,28 +225,33 @@ func TestFieldParityFinding(t *testing.T) {
 	t.Parallel()
 	const secret = "DEADBEEFPASSKEY0123456789"
 
-	skip := fieldParityFinding("demo", "test", results("A"), results("B"), false)
+	skip := fieldParityFinding("demo", "test", results("A"), results("B"), false, "harbrr.example")
 	if skip.Status != StatusSkip {
 		t.Errorf("no shared titles: status = %q, want SKIP", skip.Status)
 	}
 
 	pass := fieldParityFinding("demo", "test",
 		[]Result{{Title: "A", Size: 1000, Categories: []int{2000}}},
-		[]Result{{Title: "A", Size: 1000, Categories: []int{2040}}}, false)
+		[]Result{{Title: "A", Size: 1000, Categories: []int{2040}}}, false, "harbrr.example")
 	if pass.Status != StatusPass {
 		t.Errorf("agreeing fields: status = %q detail=%q, want PASS", pass.Status, pass.Detail)
 	}
 
 	fail := fieldParityFinding("demo", "test",
 		[]Result{{Title: "A", Size: 1_400_000_000}},
-		[]Result{{Title: "A", Size: 1_503_238_553}}, false)
+		[]Result{{Title: "A", Size: 1_503_238_553}}, false, "harbrr.example")
 	if fail.Status != StatusFail || !strings.Contains(fail.Detail, "size") {
 		t.Errorf("size divergence: status=%q detail=%q, want FAIL mentioning size", fail.Status, fail.Detail)
 	}
 
+	// A raw credential alongside a sealed sibling link (sealing active) is a leak; the
+	// finding must FAIL without echoing the secret value.
 	leak := fieldParityFinding("demo", "test",
-		[]Result{{Title: "A", DownloadURL: "http://t.example/d?passkey=" + secret}},
-		[]Result{{Title: "A"}}, false)
+		[]Result{
+			{Title: "A", DownloadURL: "http://t.example/d?passkey=" + secret},
+			{Title: "B", DownloadURL: "https://harbrr.example/dl?token=abc"},
+		},
+		[]Result{{Title: "A"}, {Title: "B"}}, false, "harbrr.example")
 	if leak.Status != StatusFail {
 		t.Fatalf("leaked passkey link: status = %q, want FAIL", leak.Status)
 	}
@@ -293,18 +325,18 @@ func TestFieldParityWindowed(t *testing.T) {
 	t.Parallel()
 	h := nResults("x", resultCap)
 	p := nResults("x", resultCap)
-	fp := fieldParity(h, p, false)
+	fp := fieldParity(h, p, false, "harbrr.example")
 	if !fp.Windowed {
 		t.Fatalf("expected Windowed at the %d-result page cap", resultCap)
 	}
 	if fp.Compared != 0 || len(fp.Divergences) != 0 {
 		t.Errorf("windowed run must not compare: %+v", fp)
 	}
-	if f := fieldParityFinding("demo", "q", h, p, false); f.Status != StatusSkip {
+	if f := fieldParityFinding("demo", "q", h, p, false, "harbrr.example"); f.Status != StatusSkip {
 		t.Errorf("windowed finding status = %q, want SKIP", f.Status)
 	}
 	// Just under the cap on one side -> not windowed, comparison proceeds.
-	if fp := fieldParity(nResults("x", resultCap-1), p, false); fp.Windowed {
+	if fp := fieldParity(nResults("x", resultCap-1), p, false, "harbrr.example"); fp.Windowed {
 		t.Errorf("one side under the cap must not be windowed")
 	}
 }

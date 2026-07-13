@@ -100,7 +100,7 @@ func TestSmoke(t *testing.T) {
 			}
 
 			pass, notes := DiffPass(harbrr, prowlarr)
-			fp := fieldParity(harbrr, prowlarr, cfg.StrictFields)
+			fp := fieldParity(harbrr, prowlarr, cfg.StrictFields, hostOf(cfg.HarbrrURL))
 			if len(fp.Divergences) > 0 {
 				// Only the count reaches the evidence Notes (titles stay out of persisted
 				// evidence); the per-title detail is logged to the operator console, scrubbed
