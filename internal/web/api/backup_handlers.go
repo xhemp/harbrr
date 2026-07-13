@@ -29,6 +29,8 @@ func (rt *router) exportBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="harbrr-backup.json"`)
+	// The bundle is an encrypted secret; keep it out of any shared/proxy cache.
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(bundle)
 }

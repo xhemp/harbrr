@@ -132,10 +132,11 @@ func (s *Service) load(ctx context.Context, q dbinterface.Execer, t *Tables) err
 	if err != nil {
 		return err
 	}
-	if err := s.loadInstances(ctx, q, t.IndexerInstances, proxyIDs, solverIDs); err != nil {
+	instanceIDs, err := s.loadInstances(ctx, q, t.IndexerInstances, proxyIDs, solverIDs)
+	if err != nil {
 		return err
 	}
-	if err := s.loadAppConnections(ctx, q, t.AppConnections, apiKeyIDs, profileIDs); err != nil {
+	if err := s.loadAppConnections(ctx, q, t.AppConnections, apiKeyIDs, profileIDs, instanceIDs); err != nil {
 		return err
 	}
 	if err := s.loadAnnounceConnections(ctx, q, t.AnnounceConnections, apiKeyIDs); err != nil {
@@ -243,8 +244,9 @@ func loadAPIKeys(ctx context.Context, q dbinterface.Execer, rows []APIKeyRow) (i
 	return m, nil
 }
 
-func (s *Service) loadInstances(ctx context.Context, q dbinterface.Execer, rows []InstanceRow, proxyIDs, solverIDs idMap) error {
+func (s *Service) loadInstances(ctx context.Context, q dbinterface.Execer, rows []InstanceRow, proxyIDs, solverIDs idMap) (idMap, error) {
 	repo := database.Instances{}
+	m := make(idMap, len(rows))
 	for _, r := range rows {
 		newID, err := repo.Insert(ctx, q, domain.IndexerInstance{
 			Slug: r.Slug, DefinitionID: r.DefinitionID, Name: r.Name, BaseURL: r.BaseURL,
@@ -253,13 +255,14 @@ func (s *Service) loadInstances(ctx context.Context, q dbinterface.Execer, rows 
 			CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 		})
 		if err != nil {
-			return fmt.Errorf("backup: insert indexer %q: %w", r.Slug, err)
+			return nil, fmt.Errorf("backup: insert indexer %q: %w", r.Slug, err)
 		}
 		if err := s.loadSettings(ctx, q, newID, r.Settings); err != nil {
-			return err
+			return nil, err
 		}
+		m[r.ID] = newID
 	}
-	return nil
+	return m, nil
 }
 
 func (s *Service) loadSettings(ctx context.Context, q dbinterface.Execer, instanceID int64, settings []SettingRow) error {
@@ -282,7 +285,7 @@ func (s *Service) loadSettings(ctx context.Context, q dbinterface.Execer, instan
 	return nil
 }
 
-func (s *Service) loadAppConnections(ctx context.Context, q dbinterface.Execer, rows []AppConnRow, apiKeyIDs, profileIDs idMap) error {
+func (s *Service) loadAppConnections(ctx context.Context, q dbinterface.Execer, rows []AppConnRow, apiKeyIDs, profileIDs, instanceIDs idMap) error {
 	repo := database.AppConnections{}
 	for _, r := range rows {
 		newID, err := repo.InsertConnection(ctx, q, domain.AppConnection{
@@ -301,6 +304,26 @@ func (s *Service) loadAppConnections(ctx context.Context, q dbinterface.Execer, 
 		}
 		if err := repo.SetConnectionSecrets(ctx, q, newID, appEnc, harbrrEnc, s.keyring.KeyID()); err != nil {
 			return fmt.Errorf("backup: set app connection secrets: %w", err)
+		}
+		if err := loadIndexerSelection(ctx, q, repo, newID, r.SelectedInstanceIDs, instanceIDs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadIndexerSelection recreates a connection's scope="selected" set, remapping each
+// original instance id to the target's new id. An id with no mapping (its instance was
+// dropped from the bundle) is skipped rather than faulting. An older bundle carries no
+// ids (nil slice), so no selection is restored — the pre-fix behaviour.
+func loadIndexerSelection(ctx context.Context, q dbinterface.Execer, repo database.AppConnections, connID int64, oldIDs []int64, instanceIDs idMap) error {
+	for _, oldID := range oldIDs {
+		newInstID, ok := instanceIDs[oldID]
+		if !ok {
+			continue
+		}
+		if err := repo.SetIndexerSelection(ctx, q, connID, newInstID, true); err != nil {
+			return fmt.Errorf("backup: restore indexer selection for connection %d: %w", connID, err)
 		}
 	}
 	return nil

@@ -346,6 +346,112 @@ func assertAdminAndSettingsRestored(t *testing.T, dstDB *database.DB) {
 	}
 }
 
+// seedSelectedConn builds a scope="selected" connection over four indexers, deletes one so
+// the survivors' ids are non-contiguous (an id-preserving restore would misfire), and
+// selects a proper subset. It returns the slugs that must survive as the selection.
+func seedSelectedConn(t *testing.T, db *database.DB, kr *secrets.Keyring) []string {
+	t.Helper()
+	ctx := context.Background()
+	repo := database.Instances{}
+	for _, slug := range []string{"alpha", "beta", "gamma", "delta"} {
+		if _, err := repo.Insert(ctx, db, domain.IndexerInstance{
+			Slug: slug, DefinitionID: slug, Name: slug, Enabled: true, Protocol: "torrent",
+		}); err != nil {
+			t.Fatalf("seed instance %q: %v", slug, err)
+		}
+	}
+	// Drop the second instance so the survivors' ids are sparse and shift on re-insert.
+	if err := repo.Delete(ctx, db, "beta"); err != nil {
+		t.Fatalf("delete instance: %v", err)
+	}
+
+	conns := database.AppConnections{}
+	connID, err := conns.InsertConnection(ctx, db, domain.AppConnection{
+		Name: "radarr", Kind: "radarr", BaseURL: "http://radarr:7878", HarbrrURL: "http://h:7478",
+		KeyID: kr.KeyID(), Enabled: true, SyncLevel: "full", IndexScope: "selected", FreeleechMode: "honor",
+	})
+	if err != nil {
+		t.Fatalf("seed selected conn: %v", err)
+	}
+	appEnc, _ := kr.Encrypt(connID, "app", appKey)
+	harbrrEnc, _ := kr.Encrypt(connID, "harbrr", appHarbrr)
+	if err := conns.SetConnectionSecrets(ctx, db, connID, appEnc, harbrrEnc, kr.KeyID()); err != nil {
+		t.Fatalf("set selected conn secrets: %v", err)
+	}
+
+	// Select a subset (gamma + delta, not alpha) — the ledger `selected` flags are the
+	// only record of a scope="selected" connection's set.
+	want := []string{"gamma", "delta"}
+	bySlug := map[string]int64{}
+	list, _ := repo.List(ctx, db)
+	for _, inst := range list {
+		bySlug[inst.Slug] = inst.ID
+	}
+	for _, slug := range want {
+		if err := conns.SetIndexerSelection(ctx, db, connID, bySlug[slug], true); err != nil {
+			t.Fatalf("select %q: %v", slug, err)
+		}
+	}
+	return want
+}
+
+// TestExportImportPreservesIndexerSelection proves a scope="selected" connection's chosen
+// indexers survive a round-trip and are remapped to the target's new instance ids. The
+// selection is checked by slug (stable identity) because the ids shift across the restore.
+func TestExportImportPreservesIndexerSelection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	srcDB, srcKR := openDB(t), openKeyring(t, keyA)
+	wantSlugs := seedSelectedConn(t, srcDB, srcKR)
+
+	bundle, err := backup.NewService(srcDB, srcKR, zerolog.Nop()).Export(ctx, backup.ExportParams{Passphrase: "pw"})
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+
+	dstDB, dstKR := openDB(t), openKeyring(t, keyB)
+	if err := backup.NewService(dstDB, dstKR, zerolog.Nop()).Import(ctx, backup.ImportParams{Payload: bundle, Passphrase: "pw", Force: true}); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	// Resolve restored instance ids back to slugs so the selection is asserted by identity,
+	// not by an id that the restore is allowed to change.
+	slugByID := map[int64]string{}
+	instList, _ := (database.Instances{}).List(ctx, dstDB)
+	for _, inst := range instList {
+		slugByID[inst.ID] = inst.Slug
+	}
+
+	conns, _ := (database.AppConnections{}).ListConnections(ctx, dstDB)
+	if len(conns) != 1 {
+		t.Fatalf("restored connections = %d, want 1", len(conns))
+	}
+	ledger, err := (database.AppConnections{}).ListConnectionIndexers(ctx, dstDB, conns[0].ID)
+	if err != nil {
+		t.Fatalf("list restored ledger: %v", err)
+	}
+	gotSelected := map[string]bool{}
+	for _, l := range ledger {
+		if !l.Selected {
+			continue
+		}
+		slug, ok := slugByID[l.InstanceID]
+		if !ok {
+			t.Fatalf("selection points at unknown instance id %d (not remapped)", l.InstanceID)
+		}
+		gotSelected[slug] = true
+	}
+	if len(gotSelected) != len(wantSlugs) {
+		t.Fatalf("restored selection = %v, want exactly slugs %v", gotSelected, wantSlugs)
+	}
+	for _, slug := range wantSlugs {
+		if !gotSelected[slug] {
+			t.Errorf("slug %q missing from restored selection %v", slug, gotSelected)
+		}
+	}
+}
+
 func TestImportWrongPassphraseFails(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

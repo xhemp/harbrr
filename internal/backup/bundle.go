@@ -125,24 +125,28 @@ type InstanceRow struct {
 // AppConnRow carries both decrypted secrets (the app's own key + the minted harbrr key)
 // and the original api-key / sync-profile references, remapped on import. Transient sync
 // status (last_sync_*) and the reconciliation ledger are intentionally not carried — they
-// are derived state, rebuilt on the next sync.
+// are derived state, rebuilt on the next sync. The one exception is SelectedInstanceIDs:
+// the ledger's `selected` flags are user intent (which indexers a scope="selected"
+// connection mirrors), not derived, so those original instance ids ride along and are
+// remapped to the target's new instance ids on import.
 type AppConnRow struct {
-	ID             int64     `json:"id"`
-	Name           string    `json:"name"`
-	Kind           string    `json:"kind"`
-	BaseURL        string    `json:"baseUrl"`
-	APIKey         string    `json:"apiKey"`
-	HarbrrURL      string    `json:"harbrrUrl"`
-	HarbrrAPIKeyID *int64    `json:"harbrrApiKeyId,omitempty"`
-	HarbrrAPIKey   string    `json:"harbrrApiKey"`
-	Enabled        bool      `json:"enabled"`
-	SyncLevel      string    `json:"syncLevel"`
-	IndexScope     string    `json:"indexScope"`
-	FreeleechMode  string    `json:"freeleechMode"`
-	Priority       int       `json:"priority"`
-	SyncProfileID  *int64    `json:"syncProfileId,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	ID                  int64     `json:"id"`
+	Name                string    `json:"name"`
+	Kind                string    `json:"kind"`
+	BaseURL             string    `json:"baseUrl"`
+	APIKey              string    `json:"apiKey"`
+	HarbrrURL           string    `json:"harbrrUrl"`
+	HarbrrAPIKeyID      *int64    `json:"harbrrApiKeyId,omitempty"`
+	HarbrrAPIKey        string    `json:"harbrrApiKey"`
+	Enabled             bool      `json:"enabled"`
+	SyncLevel           string    `json:"syncLevel"`
+	IndexScope          string    `json:"indexScope"`
+	FreeleechMode       string    `json:"freeleechMode"`
+	Priority            int       `json:"priority"`
+	SyncProfileID       *int64    `json:"syncProfileId,omitempty"`
+	SelectedInstanceIDs []int64   `json:"selectedInstanceIds,omitempty"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 // AnnounceConnRow mirrors AppConnRow's secret pair for cross-seed announce targets.

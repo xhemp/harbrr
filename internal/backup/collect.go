@@ -200,13 +200,34 @@ func (s *Service) collectAppConnections(ctx context.Context, q dbinterface.Exece
 		if err != nil {
 			return nil, err
 		}
+		selected, err := collectSelectedInstances(ctx, q, c.ID)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, AppConnRow{
 			ID: c.ID, Name: c.Name, Kind: c.Kind, BaseURL: c.BaseURL, APIKey: appKey,
 			HarbrrURL: c.HarbrrURL, HarbrrAPIKeyID: nilIfZero(c.HarbrrAPIKeyID), HarbrrAPIKey: harbrrKey,
 			Enabled: c.Enabled, SyncLevel: c.SyncLevel, IndexScope: c.IndexScope,
 			FreeleechMode: c.FreeleechMode, Priority: c.Priority, SyncProfileID: c.SyncProfileID,
-			CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+			SelectedInstanceIDs: selected, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 		})
+	}
+	return out, nil
+}
+
+// collectSelectedInstances returns the original instance ids a connection has selected
+// (ledger rows with selected=1) — the only record of a scope="selected" connection's set.
+// The rest of the ledger row (remote id, payload hash, push status) is derived and dropped.
+func collectSelectedInstances(ctx context.Context, q dbinterface.Execer, connID int64) ([]int64, error) {
+	ledger, err := (database.AppConnections{}).ListConnectionIndexers(ctx, q, connID)
+	if err != nil {
+		return nil, fmt.Errorf("backup: list connection indexers for connection %d: %w", connID, err)
+	}
+	var out []int64
+	for _, l := range ledger {
+		if l.Selected {
+			out = append(out, l.InstanceID)
+		}
 	}
 	return out, nil
 }
