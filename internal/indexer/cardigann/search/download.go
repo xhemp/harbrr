@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	apphttp "github.com/autobrr/harbrr/internal/http"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/template"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/magnet"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
 )
 
 // ResolveDownload turns a release's download link into the real torrent URL,
@@ -222,7 +222,7 @@ func resolveInfoHash(ctx context.Context, dl *loader.DownloadBlock, link string,
 	if !found || title == "" {
 		return "", false, nil
 	}
-	m := magnet.FromInfoHash(hash, title)
+	m := normalizer.FromInfoHash(hash, title)
 	if m == "" {
 		return "", false, nil
 	}
@@ -320,7 +320,7 @@ func selectValue(du *template.DownloadURI, body []byte, sel loader.SelectorField
 	if !found {
 		return "", false, nil
 	}
-	value, err = deps.Filters.Apply(value, sel.Filters)
+	value, err = deps.Filters.apply(value, sel.Filters)
 	if err != nil {
 		return "", false, fmt.Errorf("download selector %q filters: %w", rendered, err)
 	}

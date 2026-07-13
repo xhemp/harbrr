@@ -4,10 +4,9 @@ import (
 	"testing"
 
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/dateparse"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/selector"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
 )
 
 // headerDeps wires the same date machinery the engine installs (dateparse ->
@@ -15,7 +14,7 @@ import (
 // path a `date` field uses.
 func headerDeps() Deps {
 	p := dateparse.New()
-	reg := filter.NewRegistry()
+	reg := NewFilterRegistry()
 	reg.ParseDate = p.ParseDate
 	reg.ParseRelTime = p.ParseRelTime
 	return Deps{

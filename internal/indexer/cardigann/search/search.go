@@ -18,11 +18,10 @@ import (
 
 	"golang.org/x/text/encoding"
 
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/selector"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
 )
 
 // responseTypeJSON and responseTypeXML are the Response.Type values that select
@@ -80,9 +79,9 @@ type Deps struct {
 	// see the growing Result map), so it carries no state across parses. The engine
 	// leaves it nil; do not rely on an injected value.
 	Selector *selector.Engine
-	// Filters applies each field's filter chain (Apply) with the date/language
+	// Filters applies each field's filter chain (apply) with the date/language
 	// seams already wired.
-	Filters *filter.Registry
+	Filters *FilterRegistry
 	// Normalizer turns the base field map into a canonical Release.
 	Normalizer *normalizer.Normalizer
 	// Config is the resolved .Config template namespace.

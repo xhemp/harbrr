@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/selector"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/template"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/selector"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/template"
 )
 
 // optionalFields mirrors Jackett's OptionalFields: fields treated as optional
@@ -83,7 +82,7 @@ func parseField(fe loader.FieldEntry, row selector.Row, query Query, deps Deps, 
 		if ferr != nil {
 			return fmt.Errorf("field %q: %w", name, ferr)
 		}
-		value, err = deps.Filters.Apply(value, filters)
+		value, err = deps.Filters.apply(value, filters)
 		if err != nil {
 			return fmt.Errorf("field %q: %w", name, err)
 		}
@@ -187,7 +186,7 @@ func applyRowFilters(filters []loader.RowFilterBlock, title string, query Query)
 		if query.isIDSearch() {
 			continue
 		}
-		if !filter.AndMatch(title, query.templateKeywords()) {
+		if !andMatch(title, query.templateKeywords()) {
 			return true
 		}
 	}

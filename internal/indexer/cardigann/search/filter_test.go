@@ -1,4 +1,4 @@
-package filter_test
+package search
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/filter"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
@@ -145,11 +144,11 @@ func TestApplyStringFilters(t *testing.T) {
 		},
 	}
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := r.Apply(tc.in, tc.filters)
+			got, err := r.apply(tc.in, tc.filters)
 			assertResult(t, got, err, tc.want, tc.wantErr)
 		})
 	}
@@ -203,11 +202,11 @@ func TestApplyRegexFilters(t *testing.T) {
 		},
 	}
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := r.Apply(tc.in, tc.filters)
+			got, err := r.apply(tc.in, tc.filters)
 			assertResult(t, got, err, tc.want, tc.wantErr)
 		})
 	}
@@ -245,11 +244,11 @@ func TestJSONJoinArray(t *testing.T) {
 		},
 	}
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := r.Apply(tc.in, tc.filters)
+			got, err := r.apply(tc.in, tc.filters)
 			assertResult(t, got, err, tc.want, tc.wantErr)
 		})
 	}
@@ -258,9 +257,9 @@ func TestJSONJoinArray(t *testing.T) {
 func TestChaining(t *testing.T) {
 	t.Parallel()
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	// trim -> tolower -> replace, threaded left-to-right.
-	got, err := r.Apply("  HELLO WORLD  ", []loader.FilterBlock{
+	got, err := r.apply("  HELLO WORLD  ", []loader.FilterBlock{
 		fb("trim"), fb("tolower"), fb("replace", " ", "_"),
 	})
 	if err != nil {
@@ -274,8 +273,8 @@ func TestChaining(t *testing.T) {
 func TestUnknownFilterIsLoud(t *testing.T) {
 	t.Parallel()
 
-	r := filter.NewRegistry()
-	_, err := r.Apply("v", []loader.FilterBlock{fb("not_a_filter")})
+	r := NewFilterRegistry()
+	_, err := r.apply("v", []loader.FilterBlock{fb("not_a_filter")})
 	if err == nil {
 		t.Fatal("expected error for unknown filter, got nil")
 	}
@@ -287,13 +286,13 @@ func TestUnknownFilterIsLoud(t *testing.T) {
 func TestDateFiltersDefaultUnwired(t *testing.T) {
 	t.Parallel()
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	for _, name := range []string{"dateparse", "timeparse", "timeago", "reltime", "fuzzytime"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := r.Apply("2024-01-02", []loader.FilterBlock{fb(name, "yyyy-MM-dd")})
-			if !errors.Is(err, filter.ErrDateUnwired) {
-				t.Fatalf("%s: expected ErrDateUnwired, got %v", name, err)
+			_, err := r.apply("2024-01-02", []loader.FilterBlock{fb(name, "yyyy-MM-dd")})
+			if !errors.Is(err, errDateUnwired) {
+				t.Fatalf("%s: expected errDateUnwired, got %v", name, err)
 			}
 		})
 	}
@@ -303,16 +302,16 @@ func TestDateFiltersNilSeamIsLoud(t *testing.T) {
 	t.Parallel()
 
 	// A caller reassigning a date seam to nil must surface the loud
-	// ErrDateUnwired, never panic on a nil call.
-	r := filter.NewRegistry()
+	// errDateUnwired, never panic on a nil call.
+	r := NewFilterRegistry()
 	r.ParseDate = nil
 	r.ParseRelTime = nil
 	for _, name := range []string{"dateparse", "timeparse", "timeago", "reltime", "fuzzytime"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := r.Apply("2024-01-02", []loader.FilterBlock{fb(name, "yyyy-MM-dd")})
-			if !errors.Is(err, filter.ErrDateUnwired) {
-				t.Fatalf("%s: expected ErrDateUnwired, got %v", name, err)
+			_, err := r.apply("2024-01-02", []loader.FilterBlock{fb(name, "yyyy-MM-dd")})
+			if !errors.Is(err, errDateUnwired) {
+				t.Fatalf("%s: expected errDateUnwired, got %v", name, err)
 			}
 		})
 	}
@@ -322,7 +321,7 @@ func TestDateFiltersInjectedDispatch(t *testing.T) {
 	t.Parallel()
 
 	var gotValue, gotLayout string
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	r.ParseDate = func(value, layout string) (string, error) {
 		gotValue, gotLayout = value, layout
 		return "PARSED", nil
@@ -333,7 +332,7 @@ func TestDateFiltersInjectedDispatch(t *testing.T) {
 
 	// append " +02:00" then dateparse: confirms chaining feeds the date op the
 	// post-append value and the layout from the filter args.
-	got, err := r.Apply("2024-01-02 13:00", []loader.FilterBlock{
+	got, err := r.apply("2024-01-02 13:00", []loader.FilterBlock{
 		fb("append", " +02:00"),
 		fb("dateparse", "yyyy-MM-dd HH:mm zzz"),
 	})
@@ -350,7 +349,7 @@ func TestDateFiltersInjectedDispatch(t *testing.T) {
 		t.Fatalf("ParseDate layout = %q", gotLayout)
 	}
 
-	rel, err := r.Apply("2 hours ago", []loader.FilterBlock{fb("timeago")})
+	rel, err := r.apply("2 hours ago", []loader.FilterBlock{fb("timeago")})
 	if err != nil {
 		t.Fatalf("unexpected reltime error: %v", err)
 	}
@@ -363,10 +362,10 @@ func TestDateFilterPropagatesInjectedError(t *testing.T) {
 	t.Parallel()
 
 	sentinel := errors.New("boom")
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	r.ParseDate = func(string, string) (string, error) { return "", sentinel }
 
-	_, err := r.Apply("x", []loader.FilterBlock{fb("dateparse", "L")})
+	_, err := r.apply("x", []loader.FilterBlock{fb("dateparse", "L")})
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("expected wrapped sentinel, got %v", err)
 	}
@@ -389,7 +388,7 @@ func TestRowFilters(t *testing.T) {
 
 		// Non-Latin AND-match: .NET's \w is Unicode-aware, so both Cyrillic/CJK
 		// tokens must be present. RE2's ASCII \w used to tokenize these into
-		// zero tokens, making AndMatch always true (a superset vs Jackett) —
+		// zero tokens, making andMatch always true (a superset vs Jackett) —
 		// the "missing token" rows below fail-before / pass-after the fix.
 		{name: "cyrillic both tokens present", title: "Война и мир 2007 BDRip", keywords: "война мир", want: true},
 		{name: "cyrillic missing token", title: "Война 2007 BDRip", keywords: "война мир", want: false},
@@ -417,10 +416,16 @@ func TestRowFilters(t *testing.T) {
 		// splits to "12"; the \pN approximation would keep "12½" whole and miss.
 		{name: "number-other splits the token (No)", title: "12 inch vinyl 2019", keywords: "12½ inch", want: true},
 
-		// A single non-Latin char is one rune → dropped (Jackett's Length ≤ 1),
-		// so it is not required and the row is kept even though the title lacks
-		// that char.
+		// A single BMP non-Latin char is one UTF-16 code unit → dropped
+		// (Jackett's .NET Length ≤ 1), so it is not required and the row is
+		// kept even though the title lacks that char.
 		{name: "single cjk char dropped", title: "刘慈欣 novel", keywords: "三 novel", want: true},
+
+		// A single ASTRAL char (CJK Extension B, U+2000B) is one rune but a
+		// surrogate pair in .NET (Length 2) → KEPT and required, exactly like
+		// Jackett. A rune count would drop it and wrongly keep the row.
+		{name: "single astral cjk char required and missing", title: "novel 2023", keywords: "𠀋 novel", want: false},
+		{name: "single astral cjk char present", title: "𠀋 novel 2023", keywords: "𠀋 novel", want: true},
 
 		// Mixed Latin + non-Latin: every non-dropped token must be present.
 		{name: "mixed both present", title: "三体 Remembrance 1080p", keywords: "三体 remembrance", want: true},
@@ -429,19 +434,19 @@ func TestRowFilters(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := filter.AndMatch(tc.title, tc.keywords); got != tc.want {
-				t.Fatalf("AndMatch(%q,%q) = %v, want %v", tc.title, tc.keywords, got, tc.want)
+			if got := andMatch(tc.title, tc.keywords); got != tc.want {
+				t.Fatalf("andMatch(%q,%q) = %v, want %v", tc.title, tc.keywords, got, tc.want)
 			}
 		})
 	}
 
-	if !filter.StrDump("anything") {
-		t.Fatal("StrDump should always retain the row")
+	if !strDump("anything") {
+		t.Fatal("strDump should always retain the row")
 	}
-	if !filter.RowFilterKnown("andmatch") || !filter.RowFilterKnown("strdump") {
+	if !rowFilterKnown("andmatch") || !rowFilterKnown("strdump") {
 		t.Fatal("row filter names must be known")
 	}
-	if filter.RowFilterKnown("bogus") {
+	if rowFilterKnown("bogus") {
 		t.Fatal("bogus row filter must not be known")
 	}
 }
@@ -461,7 +466,7 @@ func TestCorpusFilterCompleteness(t *testing.T) {
 	}
 	t.Logf("loaded %d definitions (%d skipped)", len(defs), len(skipped))
 
-	r := filter.NewRegistry()
+	r := NewFilterRegistry()
 	fieldCounts := map[string]int{}
 	rowCounts := map[string]int{}
 	var unknown []string
@@ -470,13 +475,13 @@ func TestCorpusFilterCompleteness(t *testing.T) {
 		walkDefFilters(def, func(name string, isRow bool) {
 			if isRow {
 				rowCounts[name]++
-				if !filter.RowFilterKnown(name) {
+				if !rowFilterKnown(name) {
 					unknown = append(unknown, "row:"+name+" in "+def.ID)
 				}
 				return
 			}
 			fieldCounts[name]++
-			if !r.Known(name) {
+			if !r.known(name) {
 				unknown = append(unknown, "field:"+name+" in "+def.ID)
 			}
 		})

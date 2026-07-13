@@ -1,16 +1,17 @@
-// Package magnet reproduces Jackett's MagnetUtil: synthesising a public magnet
-// from an info hash (and the reverse) byte-for-byte, so a harbrr-synthesised
-// magnet matches Jackett's regardless of which stage builds it. It is a leaf
-// package shared by the normalizer (post-search FixResults synthesis) and the
-// download resolver (download.infohash → magnet), keeping a single source of
-// truth for the construction.
-package magnet
+package normalizer
+
+// This file reproduces Jackett's MagnetUtil: synthesising a public magnet from
+// an info hash (and the reverse) byte-for-byte, so a harbrr-synthesised magnet
+// matches Jackett's regardless of which stage builds it. It is shared by the
+// normalizer (post-search FixResults synthesis) and search's download resolver
+// (download.infohash → magnet), keeping a single source of truth for the
+// construction.
 
 import (
 	"net/url"
 	"strings"
 
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/encode"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/encode"
 )
 
 // publicTrackers is the tracker list Jackett's MagnetUtil appends when
@@ -49,11 +50,11 @@ func FromInfoHash(infoHash, title string) string {
 	return b.String()
 }
 
-// ToInfoHash reproduces MagnetUtil.MagnetToInfoHash: read the xt query
+// toInfoHash reproduces MagnetUtil.MagnetToInfoHash: read the xt query
 // argument and return the segment after the final ':' (stripping the
 // "urn:btih:" prefix). Case is preserved, matching Jackett. A magnet without a
 // usable xt yields "".
-func ToInfoHash(magnet string) string {
+func toInfoHash(magnet string) string {
 	xt := queryArg(magnet, "xt")
 	if xt == "" {
 		return ""
@@ -75,9 +76,9 @@ func ToInfoHash(magnet string) string {
 // this package reads (xt = "urn:btih:<hex|base32>", never carrying a malformed
 // '%' or a bare ';' — a legitimately percent-encoded xt has only valid escapes,
 // which both parsers decode identically) the partial-map form is identical to a
-// fully faithful lenient parser, so magnet
-// stays a pure leaf instead of coupling to filter.queryStringFirst — the other
-// faithful mirror of this same Jackett function (see filter/string_filters.go).
+// fully faithful lenient parser, so this file stays a pure leaf instead of
+// coupling to search's queryStringFirst — the other faithful mirror of this
+// same Jackett function (see search/string_filters.go).
 func queryArg(raw, name string) string {
 	_, qs, ok := strings.Cut(raw, "?")
 	if !ok {
