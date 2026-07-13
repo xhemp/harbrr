@@ -115,7 +115,6 @@ internal/
     torznabhttp/         # the served Torznab feed endpoint (query, download-token, cache, export)
   appsync/               # sync indexers into the *arr apps (sonarr/radarr/lidarr/readarr/whisparr) + qui
   announce/              # push newly-scraped releases to autobrr / cross-seed v6 / qui
-  search/                # cross-indexer fan-out/merge — placeholder; feeds are per-indexer today
   http/                  # HTTP seam: log/trace redaction, decode-error and transport-error shaping
   secrets/               # AES-256-GCM at rest (aead), argon2id passwords, bearer-token hashing, key canary/rotation
   auth/                  # web-UI / management-API authentication service
