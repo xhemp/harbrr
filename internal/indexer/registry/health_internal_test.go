@@ -44,23 +44,28 @@ func TestDeriveStatus(t *testing.T) {
 	// deriveStatus lives on StatsReporter now; construct it directly (it needs only clock).
 	r := &StatsReporter{clock: func() time.Time { return now }}
 
-	if s := r.deriveStatus(nil, database.HealthRecovery{}); s != "healthy" {
-		t.Errorf("no events => %q, want healthy", s)
-	}
 	recent := []domain.IndexerHealthEvent{{ID: 2, OccurredAt: now.Add(-1 * time.Minute)}}
-	if s := r.deriveStatus(recent, database.HealthRecovery{}); s != "unhealthy" {
-		t.Errorf("recent failure => %q, want unhealthy", s)
-	}
 	old := []domain.IndexerHealthEvent{{ID: 1, OccurredAt: now.Add(-2 * time.Hour)}}
-	if s := r.deriveStatus(old, database.HealthRecovery{}); s != "healthy" {
-		t.Errorf("old failure => %q, want healthy", s)
-	}
 	recovered := database.HealthRecovery{ThroughEventID: 2, OccurredAt: now}
-	if s := r.deriveStatus(recent, recovered); s != "healthy" {
-		t.Errorf("recovered failure => %q, want healthy", s)
-	}
 	later := []domain.IndexerHealthEvent{{ID: 3, OccurredAt: now}}
-	if s := r.deriveStatus(later, recovered); s != "unhealthy" {
-		t.Errorf("failure after recovery => %q, want unhealthy", s)
+	tests := []struct {
+		name     string
+		events   []domain.IndexerHealthEvent
+		recovery database.HealthRecovery
+		want     string
+	}{
+		{name: "no events", want: "healthy"},
+		{name: "recent failure", events: recent, want: "unhealthy"},
+		{name: "old failure", events: old, want: "healthy"},
+		{name: "recovered failure", events: recent, recovery: recovered, want: "healthy"},
+		{name: "failure after recovery", events: later, recovery: recovered, want: "unhealthy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := r.deriveStatus(tt.events, tt.recovery); got != tt.want {
+				t.Errorf("deriveStatus() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
