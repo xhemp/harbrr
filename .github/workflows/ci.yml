@@ -247,6 +247,15 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           pnpm exec tsr generate
           git -C "$GITHUB_WORKSPACE" diff --exit-code -- web/src/routeTree.gen.ts
+      # The API types are generated from internal/web/swagger/openapi.yaml and
+      # committed; a contributor who changes the spec but forgets `pnpm generate:api`
+      # fails here, not in a teammate's surprise diff later.
+      - name: api-types drift check
+        working-directory: web
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          pnpm generate:api
+          git -C "$GITHUB_WORKSPACE" diff --exit-code -- web/src/types/api.gen.ts
       - name: build
         working-directory: web
         run: pnpm build:bundle
