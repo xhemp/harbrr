@@ -172,9 +172,11 @@ export class ApiClient {
 
   // unwrap turns an openapi-fetch {data, error, response} result into the resolved
   // value or a thrown APIError, applying the same 401 hard-redirect exemptions the
-  // old hand-rolled request() used.
+  // old hand-rolled request() used. T is INFERRED from the typed client call's data
+  // shape — never pass it explicitly — so each method's declared return type is
+  // checked against what the generated types say the endpoint actually returns.
   private async unwrap<T>(
-    call: Promise<{ data?: unknown, error?: unknown, response: Response }>,
+    call: Promise<{ data?: T, error?: unknown, response: Response }>,
     endpoint: string
   ): Promise<T> {
     const { data, error, response } = await call
@@ -196,7 +198,7 @@ export class ApiClient {
   // --- auth ---
 
   async getMe(): Promise<Me> {
-    const me = await this.unwrap<Me>(this.http.GET("/api/auth/me"), "/api/auth/me")
+    const me = await this.unwrap(this.http.GET("/api/auth/me"), "/api/auth/me")
     this.setCsrfToken(me.csrfToken)
     return me
   }
@@ -236,19 +238,25 @@ export class ApiClient {
 
   // --- indexers ---
 
-  // The <Instance[]>/<Instance>/<InstanceDetail> type args below are needed because
-  // Instance patches in the `protocol` field the spec omits (see the WithProtocol
-  // note above) — the raw generated response type doesn't carry it structurally.
+  // These three are the ONLY methods whose return is asserted past what the generated
+  // types say: the response is narrowed from the spec's Instance to Instance-with-
+  // `protocol` (the field the server always sends but openapi.yaml omits — see the
+  // WithProtocol note above). The assertion sits on the RESULT, not on unwrap's type
+  // parameter, so the endpoint→data inference stays intact and the cast disappears
+  // with the WithProtocol patch once the spec gains `protocol`.
   listIndexers(): Promise<Instance[]> {
-    return this.unwrap<Instance[]>(this.http.GET("/api/indexers"), "/api/indexers")
+    return this.unwrap(this.http.GET("/api/indexers"), "/api/indexers") as Promise<Instance[]>
   }
 
   addIndexer(body: AddIndexer): Promise<Instance> {
-    return this.unwrap<Instance>(this.http.POST("/api/indexers", { body }), "/api/indexers")
+    return this.unwrap(this.http.POST("/api/indexers", { body }), "/api/indexers") as Promise<Instance>
   }
 
   getIndexer(slug: string): Promise<InstanceDetail> {
-    return this.unwrap<InstanceDetail>(this.http.GET("/api/indexers/{slug}", { params: { path: { slug } } }), "/api/indexers/{slug}")
+    return this.unwrap(
+      this.http.GET("/api/indexers/{slug}", { params: { path: { slug } } }),
+      "/api/indexers/{slug}"
+    ) as Promise<InstanceDetail>
   }
 
   // The server answers 204 (no body) on update, not the updated Instance — the old
