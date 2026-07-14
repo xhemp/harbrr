@@ -24,6 +24,7 @@ import (
 	"github.com/autobrr/harbrr/internal/database"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/definitions"
+	"github.com/autobrr/harbrr/internal/indexer/native/catalog"
 	"github.com/autobrr/harbrr/internal/indexer/registry"
 	"github.com/autobrr/harbrr/internal/logger"
 	"github.com/autobrr/harbrr/internal/notify"
@@ -116,7 +117,7 @@ func serve(ctx context.Context, cfg *config.Config, log zerolog.Logger) error {
 	// notifySvc is the registry's health sink: a recorded indexer failure fans out
 	// (async, best-effort) to configured targets. Built here so it is an option at New.
 	notifySvc := notify.NewService(db, keyring, appSyncClient(), log)
-	reg := registry.New(db, loader.New(dropinDir(cfg)), keyring,
+	reg := registry.New(db, loader.New(dropinDir(cfg)), keyring, catalog.All(),
 		registry.WithLogger(log), registry.WithSearchCache(searchCache), registry.WithHealthSink(notifySvc))
 	if err := reg.RehydrateStats(ctx); err != nil {
 		log.Warn().Err(err).Msg("loading indexer stat counters failed; counters start at zero this session")
