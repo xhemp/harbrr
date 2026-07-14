@@ -9,7 +9,7 @@ import type {
   CreateSyncProfile,
   UpdateConnection,
   UpdateSyncProfile
-} from "@/types/api"
+} from "@/lib/api"
 
 export function useAppConnections() {
   return useQuery({

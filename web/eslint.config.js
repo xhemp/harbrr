@@ -7,7 +7,7 @@ import globals from "globals"
 import tseslint from "typescript-eslint"
 
 export default tseslint.config([
-  globalIgnores(["dist", "src/routeTree.gen.ts", "vite.config.ts"]),
+  globalIgnores(["dist", "src/routeTree.gen.ts", "src/types/api.gen.ts", "vite.config.ts"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
