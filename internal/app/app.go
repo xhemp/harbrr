@@ -412,7 +412,9 @@ func (a *App) Run(ctx context.Context) error {
 	bgCancel()
 	bg.Wait()
 	drainNotify(ctx, a.notify)
-	_ = a.db.Close()
+	if err := a.db.Close(); err != nil {
+		a.log.Warn().Err(err).Msg("closing database failed")
+	}
 
 	return runErr
 }
