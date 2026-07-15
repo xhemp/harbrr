@@ -12,8 +12,11 @@ package gazellegames
 
 import (
 	"context"
+	"strings"
 	"sync"
 
+	apphttp "github.com/autobrr/harbrr/internal/http"
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 	"github.com/autobrr/harbrr/internal/indexer/native"
 )
@@ -55,6 +58,33 @@ func (d *driver) cfgValue(name string) string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.Cfg[name]
+}
+
+// scrub is GazelleGames' own value-scrub, NOT native.Base.Scrub. It shares the same
+// two primitives (loader.SecretValues + apphttp.ScrubValues) but cannot go through
+// Base.Scrub directly, for two reasons specific to this driver:
+//
+//   - Base.Scrub reads b.Cfg with no synchronization (Base's documented contract:
+//     Cfg is wired once by NewBase and read-only afterwards). GazelleGames is the
+//     ONE native driver that breaks that contract — fetchPasskey persists the
+//     on-demand download passkey back into Cfg under d.mu, concurrently with a
+//     download-URL build reading it — so deriving the scrub set from Cfg must go
+//     through the same mutex fetchPasskey's writer uses, or the read races it.
+//   - The passkey is not a declared Settings field at all (see credentialSettings:
+//     "The download passkey is NOT a user setting"), so loader.SecretValues could
+//     never see it via Cfg/Settings regardless of locking — it must be passed
+//     explicitly.
+//
+// The derivation runs over the FULL Cfg under the mutex (loader.SecretValues only
+// reads it; the lock is released once every map read is done), so a future secret
+// setting added to credentialSettings is picked up automatically rather than
+// silently missed by a hand-built key list.
+func (d *driver) scrub(s string) string {
+	d.mu.Lock()
+	secrets := loader.SecretValues(d.Def.Settings, d.Cfg)
+	passkey := strings.TrimSpace(d.Cfg["passkey"])
+	d.mu.Unlock()
+	return apphttp.ScrubValues(s, append(secrets, passkey))
 }
 
 // NeedsResolver is always true: a GazelleGames download URL carries the passkey in its

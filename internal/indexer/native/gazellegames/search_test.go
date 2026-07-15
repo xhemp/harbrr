@@ -326,13 +326,44 @@ func TestSearchTransportErrorHostOnly(t *testing.T) {
 	}
 }
 
-// TestScrubSecrets proves both the apikey and the persisted passkey are redacted out of any
-// surfaced message so neither can leak through a server echo.
+// TestScrubSecrets proves both the apikey (IsSecret-derived from the full Cfg) and the
+// persisted passkey (the explicit extra — not a declared setting) are redacted out of
+// any surfaced message so neither can leak through a server echo.
 func TestScrubSecrets(t *testing.T) {
 	t.Parallel()
-	d := searchDriver(t, &scriptDoer{})
-	got := d.scrubSecrets("key " + credAPIKey + " pass " + credPasskey)
-	if strings.Contains(got, credAPIKey) || strings.Contains(got, credPasskey) {
-		t.Fatalf("scrubSecrets left a secret: %q", got)
+
+	tests := []struct {
+		name       string
+		in         string
+		wantNoLeak []string
+	}{
+		{
+			name:       "apikey redacted",
+			in:         "key " + credAPIKey + " rejected",
+			wantNoLeak: []string{credAPIKey},
+		},
+		{
+			name:       "persisted passkey redacted",
+			in:         "pass " + credPasskey + " rejected",
+			wantNoLeak: []string{credPasskey},
+		},
+		{
+			name:       "both secrets in one message",
+			in:         "key " + credAPIKey + " pass " + credPasskey,
+			wantNoLeak: []string{credAPIKey, credPasskey},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := searchDriver(t, &scriptDoer{})
+			got := d.scrub(tt.in)
+			for _, leak := range tt.wantNoLeak {
+				if strings.Contains(got, leak) {
+					t.Errorf("scrub left a secret (%q): %q", leak, got)
+				}
+			}
+		})
 	}
 }

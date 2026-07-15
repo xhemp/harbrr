@@ -58,8 +58,9 @@ func (d *driver) buildRPCBody(params btnParameters, results, offset int) ([]byte
 	})
 	if err != nil {
 		// The marshal error could quote the body (which holds the API key), so it is
-		// scrubbed before it can surface.
-		return nil, fmt.Errorf("broadcastthenet: build request body: %s", d.scrubAPIKey(err.Error()))
+		// scrubbed before it can surface — via ScrubErr, so the error chain stays
+		// intact for errors.Is/As while the displayed message is redacted.
+		return nil, fmt.Errorf("broadcastthenet: build request body: %w", d.ScrubErr(err))
 	}
 	return body, nil
 }

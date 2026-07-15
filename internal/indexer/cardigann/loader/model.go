@@ -220,6 +220,42 @@ func nameLooksSecret(name string) bool {
 	return false
 }
 
+// SecretValues returns the non-empty, trimmed config VALUES of every setting the
+// authoritative IsSecret classifier marks a credential, so a server-echoed secret
+// can be value-scrubbed out of a diagnostic string (apphttp.ScrubValues). loader
+// owns IsSecret, so this is the one place both the login stage and a native driver
+// derive the scrub set from — without either importing the other.
+//
+// Deriving the set from IsSecret over the definition's OWN settings — rather than a
+// hardcoded key list — is what makes it correct: it catches every credential the
+// loader encrypts at rest (password/cookie/apikey/passkey/rsskey/authkey/2fa/otp/
+// token/pin, and a def's differently-named field such as Bittorrentfiles' `pass`,
+// type: password) and never scrubs a non-secret (a definition's `username` stays
+// intact, so a legitimate "no such user 'dave'" survives).
+//
+// A value is trimmed before comparison: several drivers submit a trimmed config
+// value (leading/trailing whitespace never reaches the tracker), so the raw,
+// untrimmed value would not match a server's echo of it. The empty-guard (checked
+// after trimming) drops an unset/blank credential so the caller's ReplaceAll is
+// never handed "" (which would splice the placeholder between every rune).
+//
+// This is intentionally scoped to Settings, not the broader at-rest classifier
+// (which also flags proxy_url/flaresolverr_url and an undeclared-name fallback):
+// only a value the definition actually SENT to the tracker can be echoed back, and
+// every tracker-submitted secret is a Settings field.
+func SecretValues(settings []SettingsField, config map[string]string) []string {
+	var vals []string
+	for i := range settings {
+		if !settings[i].IsSecret() {
+			continue
+		}
+		if v := strings.TrimSpace(config[settings[i].Name]); v != "" {
+			vals = append(vals, v)
+		}
+	}
+	return vals
+}
+
 // Login mirrors Login.
 type Login struct {
 	Method          string                   `yaml:"method,omitempty"`
