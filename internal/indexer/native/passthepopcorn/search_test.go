@@ -275,32 +275,45 @@ func TestIsJSONContentType(t *testing.T) {
 // defensive scrub for any error a future leaf might wrap). Both apiuser and apikey are
 // IsSecret-classified (apiuser is force-typed "password" precisely so it is; see
 // sites.go's credentialSettings), so Base.Scrub's derived set catches both with no
-// extras.
+// extras. The overlapping case proves the longer credential is redacted first: when
+// one secret is a substring of the other, redacting the shorter first would mangle
+// the longer and leak a fragment — apphttp.ScrubValues (which Base.Scrub delegates
+// to) sorts longest-first unconditionally, so this is no longer a per-driver concern.
 func TestScrubSecrets(t *testing.T) {
 	t.Parallel()
-	d := searchDriver(t, &scriptDoer{})
-	in := "boom user=" + credAPIUser + " key=" + credAPIKey
-	got := d.Scrub(in)
-	if strings.Contains(got, credAPIUser) || strings.Contains(got, credAPIKey) {
-		t.Errorf("Scrub left a credential: %q", got)
-	}
-}
 
-// TestScrubSecretsOverlapping proves the longer credential is redacted first: when one
-// secret is a substring of the other (here ApiUser "USER123" is contained in ApiKey
-// "USER123KEY"), redacting the shorter first would mangle the longer and leak the "KEY"
-// fragment. apphttp.ScrubValues (which Base.Scrub delegates to) sorts longest-first
-// unconditionally, so this is no longer a per-driver concern.
-func TestScrubSecretsOverlapping(t *testing.T) {
-	t.Parallel()
-	const (
-		shortSecret = "USER123"
-		longSecret  = "USER123KEY"
-	)
-	d := searchDriver(t, &scriptDoer{})
-	d.Cfg = map[string]string{"apiuser": shortSecret, "apikey": longSecret}
-	got := d.Scrub("leak " + longSecret + " and " + shortSecret)
-	if strings.Contains(got, shortSecret) {
-		t.Errorf("Scrub left a credential fragment: %q", got)
+	tests := []struct {
+		name       string
+		cfg        map[string]string // nil = searchDriver's default synthetic creds
+		in         string
+		wantNoLeak []string
+	}{
+		{
+			name:       "both credentials redacted",
+			in:         "boom user=" + credAPIUser + " key=" + credAPIKey,
+			wantNoLeak: []string{credAPIUser, credAPIKey},
+		},
+		{
+			name:       "overlapping secrets: longer redacted first, no fragment leaks",
+			cfg:        map[string]string{"apiuser": "USER123", "apikey": "USER123KEY"},
+			in:         "leak USER123KEY and USER123",
+			wantNoLeak: []string{"USER123KEY", "USER123"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := searchDriver(t, &scriptDoer{})
+			if tt.cfg != nil {
+				d.Cfg = tt.cfg
+			}
+			got := d.Scrub(tt.in)
+			for _, leak := range tt.wantNoLeak {
+				if strings.Contains(got, leak) {
+					t.Errorf("Scrub left a credential (%q): %q", leak, got)
+				}
+			}
+		})
 	}
 }

@@ -60,19 +60,46 @@ func TestGetTransportErrorScrubsCookie(t *testing.T) {
 // via apphttp.ScrubValues). An empty cfg is a no-op.
 func TestScrubSecrets(t *testing.T) {
 	t.Parallel()
-	d := testDriver(t, &scriptDoer{}, map[string]string{"cookie": credCookie, "user_agent": credUA})
-	in := "dial failed for Cookie=" + credCookie + " UA=" + credUA
-	out := d.Scrub(in, strings.TrimSpace(d.Cfg["user_agent"]))
-	if strings.Contains(out, credCookie) || strings.Contains(out, credUA) {
-		t.Errorf("Scrub left a secret: %q", out)
-	}
-	if !strings.Contains(out, "[redacted]") {
-		t.Errorf("Scrub did not insert the placeholder: %q", out)
+
+	tests := []struct {
+		name            string
+		cfg             map[string]string
+		in              string
+		wantNoLeak      []string
+		wantPlaceholder bool
+		wantUnchanged   bool
+	}{
+		{
+			name:            "cookie and user_agent redacted with the shared placeholder",
+			cfg:             map[string]string{"cookie": credCookie, "user_agent": credUA},
+			in:              "dial failed for Cookie=" + credCookie + " UA=" + credUA,
+			wantNoLeak:      []string{credCookie, credUA},
+			wantPlaceholder: true,
+		},
+		{
+			name:          "empty cfg leaves the string untouched",
+			cfg:           map[string]string{},
+			in:            "plain message",
+			wantUnchanged: true,
+		},
 	}
 
-	// An empty cfg leaves the string untouched.
-	empty := testDriver(t, &scriptDoer{}, map[string]string{})
-	if got := empty.Scrub("plain message"); got != "plain message" {
-		t.Errorf("Scrub(empty cfg) = %q, want unchanged", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := testDriver(t, &scriptDoer{}, tt.cfg)
+			out := d.Scrub(tt.in, strings.TrimSpace(d.Cfg["user_agent"]))
+			for _, leak := range tt.wantNoLeak {
+				if strings.Contains(out, leak) {
+					t.Errorf("Scrub left a secret (%q): %q", leak, out)
+				}
+			}
+			if tt.wantPlaceholder && !strings.Contains(out, "[redacted]") {
+				t.Errorf("Scrub did not insert the placeholder: %q", out)
+			}
+			if tt.wantUnchanged && out != tt.in {
+				t.Errorf("Scrub(%q) = %q, want unchanged", tt.in, out)
+			}
+		})
 	}
 }

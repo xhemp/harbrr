@@ -74,12 +74,16 @@ func (d *driver) cfgValue(name string) string {
 //     "The download passkey is NOT a user setting"), so loader.SecretValues could
 //     never see it via Cfg/Settings regardless of locking — it must be passed
 //     explicitly.
+//
+// The derivation runs over the FULL Cfg under the mutex (loader.SecretValues only
+// reads it; the lock is released once every map read is done), so a future secret
+// setting added to credentialSettings is picked up automatically rather than
+// silently missed by a hand-built key list.
 func (d *driver) scrub(s string) string {
 	d.mu.Lock()
-	apikey := d.Cfg["apikey"]
+	secrets := loader.SecretValues(d.Def.Settings, d.Cfg)
 	passkey := strings.TrimSpace(d.Cfg["passkey"])
 	d.mu.Unlock()
-	secrets := loader.SecretValues(d.Def.Settings, map[string]string{"apikey": apikey})
 	return apphttp.ScrubValues(s, append(secrets, passkey))
 }
 

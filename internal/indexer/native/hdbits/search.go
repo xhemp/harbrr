@@ -110,8 +110,9 @@ func (d *driver) buildRequest(q search.Query) ([]byte, error) {
 	body, err := json.Marshal(tq)
 	if err != nil {
 		// A marshal error could quote the body (which holds the credentials), so it is
-		// scrubbed before it can surface.
-		return nil, fmt.Errorf("hdbits: build request body: %s", d.Scrub(err.Error()))
+		// scrubbed before it can surface — via ScrubErr, so the error chain stays
+		// intact for errors.Is/As while the displayed message is redacted.
+		return nil, fmt.Errorf("hdbits: build request body: %w", d.ScrubErr(err))
 	}
 	return body, nil
 }
