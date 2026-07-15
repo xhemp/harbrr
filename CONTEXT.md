@@ -50,6 +50,15 @@ _Avoid_: error mapping, status handling
 
 ### Serving
 
+**Indexer**:
+A searchable tracker as the rest of harbrr consumes it — identity, capabilities,
+and Search/Grab — independent of whether a Cardigann Definition or a native driver
+backs it. The `core.Indexer` contract (`internal/indexer/core`) is satisfied by an
+adapter over the engine (or a native driver) and served by the Torznab/Newznab
+handler.
+_Avoid_: tracker (when the served contract is meant), provider (that is the
+id → Indexer lookup).
+
 **Grab**:
 The server-side fetch of one release's torrent/NZB that the `/dl` proxy drives, so
 credentials and passkey-bearing links never reach the *arr client.
