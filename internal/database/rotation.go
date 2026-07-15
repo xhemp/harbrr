@@ -117,9 +117,11 @@ func SecretSurfaces() []FixedAADSurface {
 			Columns: []SecretColumn{{Cipher: "url_encrypted", Setting: "url"}},
 		},
 		{
-			// internal/proxy/service.go seals with the proxy id; domain.ProxySecretURL.
+			// internal/proxy/service.go seals the password with the proxy id;
+			// domain.ProxySecretPassword. url_encrypted is legacy (pre-#71) storage the
+			// boot backfill alone reads, never a rotation target.
 			Table: "proxies", KeyIDCol: "key_id",
-			Columns: []SecretColumn{{Cipher: "url_encrypted", Setting: domain.ProxySecretURL}},
+			Columns: []SecretColumn{{Cipher: "password_encrypted", Setting: domain.ProxySecretPassword}},
 		},
 		{
 			// internal/solver/service.go seals with the solver id; domain.SolverSecretURL.

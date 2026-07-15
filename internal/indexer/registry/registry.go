@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -399,11 +401,11 @@ func (r *Resolver) resolveResourceRefs(ctx context.Context, inst domain.IndexerI
 		p, err := r.proxies.GetProxy(ctx, r.db, *inst.ProxyID)
 		switch {
 		case err == nil:
-			url, derr := r.keyring.Decrypt(p.ID, domain.ProxySecretURL, p.URLEncrypted)
+			password, derr := r.keyring.Decrypt(p.ID, domain.ProxySecretPassword, p.PasswordEncrypted)
 			if derr != nil {
-				return fmt.Errorf("registry: decrypt proxy %d url: %w", p.ID, derr)
+				return fmt.Errorf("registry: decrypt proxy %d password: %w", p.ID, derr)
 			}
-			cfg["proxy_type"], cfg["proxy_url"] = p.Type, url
+			cfg["proxy_type"], cfg["proxy_url"] = p.Type, composeProxyURL(p, password)
 		case !errors.Is(err, database.ErrNotFound):
 			return fmt.Errorf("registry: load proxy %d: %w", *inst.ProxyID, err)
 		}
@@ -412,11 +414,11 @@ func (r *Resolver) resolveResourceRefs(ctx context.Context, inst domain.IndexerI
 		s, err := r.solvers.GetSolver(ctx, r.db, *inst.SolverID)
 		switch {
 		case err == nil:
-			url, derr := r.keyring.Decrypt(s.ID, domain.SolverSecretURL, s.URLEncrypted)
+			flareURL, derr := r.keyring.Decrypt(s.ID, domain.SolverSecretURL, s.URLEncrypted)
 			if derr != nil {
 				return fmt.Errorf("registry: decrypt solver %d url: %w", s.ID, derr)
 			}
-			cfg["solver_type"], cfg["flaresolverr_url"] = s.Type, url
+			cfg["solver_type"], cfg["flaresolverr_url"] = s.Type, flareURL
 			if s.MaxTimeout > 0 {
 				cfg["flaresolverr_max_timeout"] = strconv.Itoa(s.MaxTimeout)
 			}
@@ -425,6 +427,23 @@ func (r *Resolver) resolveResourceRefs(ctx context.Context, inst domain.IndexerI
 		}
 	}
 	return nil
+}
+
+// composeProxyURL builds the type://[user[:pass]@]host:port transport URL
+// buildTransport expects from a proxy's structured fields — only the password
+// needed decrypting; host/port/username are already plain. This string can embed
+// the password, so it lives only in cfg["proxy_url"] for buildTransport's
+// http.ProxyURL/proxy.FromURL call and is never logged, traced, or returned in an
+// error (registry's own errors above name the proxy by id, never its URL).
+func composeProxyURL(p domain.Proxy, password string) string {
+	u := &url.URL{Scheme: p.Type, Host: net.JoinHostPort(p.Host, strconv.Itoa(p.Port))}
+	switch {
+	case password != "":
+		u.User = url.UserPassword(p.Username, password)
+	case p.Username != "":
+		u.User = url.User(p.Username)
+	}
+	return u.String()
 }
 
 // buildInner constructs the engine-shaped core: a native family driver when a

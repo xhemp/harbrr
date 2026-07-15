@@ -32,17 +32,20 @@ func newResolveRegistry(t *testing.T) (*Registry, *secrets.Keyring, *database.DB
 	return New(db, loader.New(t.TempDir()), kr, nil), kr, db
 }
 
-// seedProxy inserts a proxy with its URL sealed under the proxy's own id (the
-// two-phase write the service performs), returning the new id.
-func seedProxy(t *testing.T, db *database.DB, kr *secrets.Keyring, typ, url string) int64 {
+// seedProxy inserts a proxy with structured host/port/username and its password
+// sealed under the proxy's own id (the two-phase write the service performs),
+// returning the new id.
+func seedProxy(t *testing.T, db *database.DB, kr *secrets.Keyring, typ, host string, port int, username, password string) int64 {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	id, err := (database.Proxies{}).InsertProxy(ctx, db, domain.Proxy{Name: "p", Type: typ, CreatedAt: now, UpdatedAt: now})
+	id, err := (database.Proxies{}).InsertProxy(ctx, db, domain.Proxy{
+		Name: "p", Type: typ, Host: host, Port: port, Username: username, CreatedAt: now, UpdatedAt: now,
+	})
 	if err != nil {
 		t.Fatalf("InsertProxy: %v", err)
 	}
-	enc, err := kr.Encrypt(id, domain.ProxySecretURL, url)
+	enc, err := kr.Encrypt(id, domain.ProxySecretPassword, password)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -57,7 +60,7 @@ func TestResolveResourceRefs(t *testing.T) {
 	reg, kr, db := newResolveRegistry(t)
 	ctx := context.Background()
 
-	proxyID := seedProxy(t, db, kr, domain.ProxyTypeSOCKS5, "socks5://10.0.0.9:1080")
+	proxyID := seedProxy(t, db, kr, domain.ProxyTypeSOCKS5, "10.0.0.9", 1080, "", "")
 	solverID, err := (database.Solvers{}).InsertSolver(ctx, db, domain.Solver{
 		Name: "fs", Type: domain.SolverTypeFlaresolverr, MaxTimeout: 120, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	})
@@ -80,6 +83,18 @@ func TestResolveResourceRefs(t *testing.T) {
 		}
 		if cfg["solver_type"] != domain.SolverTypeFlaresolverr || cfg["flaresolverr_url"] != "http://flaresolverr:8191" || cfg["flaresolverr_max_timeout"] != "120" {
 			t.Errorf("solver cfg = %q %q %q", cfg["solver_type"], cfg["flaresolverr_url"], cfg["flaresolverr_max_timeout"])
+		}
+	})
+
+	t.Run("credentials are composed into the transport url", func(t *testing.T) {
+		authedID := seedProxy(t, db, kr, domain.ProxyTypeHTTP, "proxy.internal", 3128, "alice", "s3cret")
+		cfg := map[string]string{}
+		inst := domain.IndexerInstance{ProxyID: &authedID}
+		if err := reg.resolveResourceRefs(ctx, inst, cfg); err != nil {
+			t.Fatalf("resolveResourceRefs: %v", err)
+		}
+		if want := "http://alice:s3cret@proxy.internal:3128"; cfg["proxy_url"] != want {
+			t.Errorf("proxy_url = %q, want %q", cfg["proxy_url"], want)
 		}
 	})
 

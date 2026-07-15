@@ -180,11 +180,13 @@ func (d *deps) ensureProxy(ctx context.Context, typ, rawURL string) (int64, erro
 	if err != nil {
 		return 0, fmt.Errorf("resourcemigrate: insert proxy: %w", err)
 	}
+	// Folded in the pre-#71 shape (one composite URL, no host yet): SplitProxyURLs
+	// converts it to structured fields right after Run, on the same boot.
 	sealed, err := d.kr.Encrypt(id, domain.ProxySecretURL, rawURL)
 	if err != nil {
 		return 0, fmt.Errorf("resourcemigrate: encrypt proxy url: %w", err)
 	}
-	if err := d.proxRepo.SetProxySecret(ctx, d.tx, id, sealed, d.kr.KeyID()); err != nil {
+	if err := d.proxRepo.SetProxyLegacyURL(ctx, d.tx, id, sealed); err != nil {
 		return 0, fmt.Errorf("resourcemigrate: seal proxy: %w", err)
 	}
 	d.proxyByKey[key] = id

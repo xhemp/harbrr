@@ -7,7 +7,7 @@ import type { DefinitionDetail, InstanceDetail, Proxy, Solver } from "@/lib/api"
 import { IndexerForm, type IndexerFormSubmit } from "./IndexerForm"
 
 // The form fetches the global proxy/solver resources for its Advanced dropdowns.
-const PROXIES: Proxy[] = [{ id: 7, name: "home", type: "socks5", url: REDACTED, createdAt: "", updatedAt: "" }]
+const PROXIES: Proxy[] = [{ id: 7, name: "home", type: "socks5", host: "10.0.0.9", port: 1080, username: "", createdAt: "", updatedAt: "" }]
 const SOLVERS: Solver[] = [{ id: 9, name: "fs", type: "flaresolverr", url: REDACTED, maxTimeout: 0, createdAt: "", updatedAt: "" }]
 
 function json(body: unknown): Response {
