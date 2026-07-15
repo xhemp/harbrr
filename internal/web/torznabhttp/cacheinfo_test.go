@@ -87,12 +87,12 @@ func TestIfNoneMatchMatches(t *testing.T) {
 func TestCacheInfoSinkRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx, ci := WithCacheInfoSink(context.Background())
-	RecordCacheInfo(ctx, CacheInfo{ETag: `"x"`, ExpiresAt: feedClock})
-	if ci.ETag != `"x"` || !ci.ExpiresAt.Equal(feedClock) {
+	RecordCacheInfo(ctx, CacheInfo{Cached: true, ExpiresAt: feedClock})
+	if !ci.Cached || !ci.ExpiresAt.Equal(feedClock) {
 		t.Fatalf("sink not filled: %+v", ci)
 	}
 	// Recording into a ctx without a sink must be a no-op (no panic).
-	RecordCacheInfo(context.Background(), CacheInfo{ETag: `"y"`})
+	RecordCacheInfo(context.Background(), CacheInfo{Cached: true})
 }
 
 // feedDo drives a feed request against a cache-recording indexer, with optional
@@ -113,12 +113,14 @@ func feedDo(t *testing.T, idx *fakeIndexer, rawQuery string, hdr http.Header) *h
 	return rec
 }
 
-// cachingIndexer is a rich indexer that reports a cached response with the given etag,
-// expiring 5 minutes after the fixed feed clock.
-func cachingIndexer(t *testing.T, etag string) *fakeIndexer {
+// cachingIndexer is a rich indexer that reports a cached response, expiring 5 minutes
+// after the fixed feed clock. The served ETag header value is always derived by the
+// handler from the served page (servedPayloadETag+pagedETag), never from CacheInfo —
+// this only arranges for the cache-came-from signal to be true so validators are emitted.
+func cachingIndexer(t *testing.T) *fakeIndexer {
 	t.Helper()
 	idx := richIndexer(t)
-	idx.recordInfo = &CacheInfo{ETag: etag, ExpiresAt: feedClock.Add(5 * time.Minute)}
+	idx.recordInfo = &CacheInfo{Cached: true, ExpiresAt: feedClock.Add(5 * time.Minute)}
 	return idx
 }
 
@@ -128,7 +130,7 @@ func cachingIndexer(t *testing.T, etag string) *fakeIndexer {
 // folded with this page's window (offset=0, limit=defaultLimit for a window-less request).
 func TestFeedEmitsValidators(t *testing.T) {
 	t.Parallel()
-	idx := cachingIndexer(t, `"abc"`)
+	idx := cachingIndexer(t)
 	rec := feedDo(t, idx, "t=search&q=x", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -155,12 +157,12 @@ func TestFeedConditionalGet304(t *testing.T) {
 	t.Parallel()
 
 	// Capture the served validator from a normal request, then revalidate with it.
-	first := feedDo(t, cachingIndexer(t, `"abc"`), "t=search&q=x", nil)
+	first := feedDo(t, cachingIndexer(t), "t=search&q=x", nil)
 	served := first.Header().Get("ETag")
 	if served == "" {
 		t.Fatal("first response emitted no ETag to revalidate against")
 	}
-	rec := feedDo(t, cachingIndexer(t, `"abc"`), "t=search&q=x",
+	rec := feedDo(t, cachingIndexer(t), "t=search&q=x",
 		http.Header{"If-None-Match": {served}})
 	if rec.Code != http.StatusNotModified {
 		t.Fatalf("status = %d, want 304", rec.Code)
@@ -175,7 +177,7 @@ func TestFeedConditionalGet304(t *testing.T) {
 		t.Errorf("304 Cache-Control = %q, want private, max-age=300", got)
 	}
 
-	rec = feedDo(t, cachingIndexer(t, `"abc"`), "t=search&q=x",
+	rec = feedDo(t, cachingIndexer(t), "t=search&q=x",
 		http.Header{"If-None-Match": {`"stale"`}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("non-matching If-None-Match status = %d, want 200", rec.Code)
@@ -189,7 +191,7 @@ func TestFeedConditionalGet304(t *testing.T) {
 func TestFeedConditionalGetPagingAware(t *testing.T) {
 	t.Parallel()
 	newIdx := func() *fakeIndexer {
-		idx := cachingIndexer(t, `"abc"`)
+		idx := cachingIndexer(t)
 		idx.releases = []*normalizer.Release{
 			demoRelease("P0", "https://rich.test/dl/0.torrent", []int{2000}),
 			demoRelease("P1", "https://rich.test/dl/1.torrent", []int{2000}),
@@ -232,7 +234,7 @@ func TestFeedConditionalGetPagingAware(t *testing.T) {
 // client's If-None-Match would otherwise match.
 func TestFeedNoCacheHeaderForcesFresh(t *testing.T) {
 	t.Parallel()
-	idx := cachingIndexer(t, `"abc"`)
+	idx := cachingIndexer(t)
 	rec := feedDo(t, idx, "t=search&q=x",
 		http.Header{"If-None-Match": {`"abc"`}, "Cache-Control": {"no-cache"}})
 	if rec.Code != http.StatusOK {
@@ -277,7 +279,7 @@ func feedTotal(t *testing.T, body string) int {
 // unique links, for the cross-page paging tests.
 func pagingIndexer(t *testing.T, n int) *fakeIndexer {
 	t.Helper()
-	idx := cachingIndexer(t, `"abc"`) // a non-empty payload ETag so validators are emitted
+	idx := cachingIndexer(t) // Cached=true so validators are emitted
 	rels := make([]*normalizer.Release, n)
 	for i := range rels {
 		rels[i] = demoRelease(

@@ -390,10 +390,11 @@ func (h *handler) writeResults(w http.ResponseWriter, r *http.Request, idx Index
 	if !h.resolveMode(w, q, caps) {
 		return
 	}
-	// A CacheInfo sink lets the cache decorator surface the served entry's validators
-	// (ETag + expiry) for the conditional-GET response below. A `no-cache` request
-	// header forces a live fetch — the header sibling of the `nocache=1` query param —
-	// and, like it, suppresses the 304 short-circuit so the client gets a fresh body.
+	// A CacheInfo sink lets the cache decorator surface whether this response came
+	// from — or was freshly stored into — the cache, plus the entry's expiry, for the
+	// conditional-GET response below. A `no-cache` request header forces a live fetch
+	// — the header sibling of the `nocache=1` query param — and, like it, suppresses
+	// the 304 short-circuit so the client gets a fresh body.
 	ctx, ci := WithCacheInfoSink(r.Context())
 	headerFresh := requestNoCache(r)
 	if headerFresh {
@@ -414,11 +415,11 @@ func (h *handler) writeResults(w http.ResponseWriter, r *http.Request, idx Index
 	// bypass feed share one cached entry, and the payload ETag is page-independent, so
 	// without these folds a revalidation of one feed/page could be answered 304 with
 	// another variant's or page's body.
-	if ci.ETag != "" {
+	if ci.Cached {
 		if view, ok := servedPayloadETag(res.Releases, freeleechBypass(ctx)); ok {
-			served := &CacheInfo{ETag: pagedETag(view, res.Offset, res.Limit), ExpiresAt: ci.ExpiresAt}
-			setCacheValidators(w, served, h.clock())
-			if !headerFresh && !wantsNoCache(q) && ifNoneMatchMatches(r.Header.Get("If-None-Match"), served.ETag) {
+			etag := pagedETag(view, res.Offset, res.Limit)
+			setCacheValidators(w, etag, ci.ExpiresAt, h.clock())
+			if !headerFresh && !wantsNoCache(q) && ifNoneMatchMatches(r.Header.Get("If-None-Match"), etag) {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
