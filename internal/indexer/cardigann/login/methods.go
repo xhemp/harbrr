@@ -101,7 +101,7 @@ func (e *Executor) loginOneURL(ctx context.Context, def *loader.Definition) erro
 // postForm POSTs url.Values as application/x-www-form-urlencoded to the resolved
 // target path, then runs the error selectors. Used by the post method only; the
 // form method posts its already-resolved form action via postFormAbsolute
-// (form.go). Both share solveAndRetryLoginPost for a challenged POST.
+// (form.go). Both share submitLoginPost for a challenged POST.
 //
 // Login form bodies use stdlib url.Values.Encode (alphabetically sorted keys,
 // url.QueryEscape values), which diverges from Jackett's WebUtility encoding on
@@ -118,20 +118,30 @@ func (e *Executor) postForm(ctx context.Context, def *loader.Definition, target 
 	}
 	headers := mergeFormHeaders(def.Login.Headers)
 	encoded := pairs.Encode()
-	secrets := e.loginSecrets(def)
+	return e.submitLoginPost(ctx, def.Login, rawURL, encoded, headers, e.loginSecrets(def))
+}
+
+// submitLoginPost POSTs encoded to rawURL, then either clears an anti-bot
+// challenge and retries or runs the error selectors — the shared body of
+// postForm and postFormAbsolute, so a future POST-based login method cannot
+// silently forget the challenge check.
+//
+// When the POST is blocked by an anti-bot challenge (e.g. Cloudflare gating the
+// login endpoint), harbrr cannot clear it during the POST itself — a solver
+// cannot complete a JS challenge mid-submission. But a GET of the SAME login URL
+// IS challenged and yields a host-wide cf_clearance, so solve that, then retry
+// the POST carrying the clearance cookie + the bound User-Agent. Without this
+// check a challenge page sails through checkErrors (no 401, no error-selector
+// match) as a SILENT false success with no session cookies.
+func (e *Executor) submitLoginPost(ctx context.Context, l *loader.Login, rawURL, encoded string, headers map[string][]string, secrets []string) error {
 	body, status, err := e.do(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(encoded), headers)
 	if err != nil {
 		return err
 	}
-	// When the POST is blocked by an anti-bot challenge (e.g. Cloudflare gating the
-	// login endpoint), harbrr cannot clear it during the POST itself — a solver
-	// cannot complete a JS challenge mid-submission. But a GET of the SAME login URL
-	// IS challenged and yields a host-wide cf_clearance, so solve that, then retry
-	// the POST carrying the clearance cookie + the bound User-Agent.
 	if detectAntiBot(body) != nil {
-		return e.solveAndRetryLoginPost(ctx, def.Login, rawURL, encoded, headers, secrets)
+		return e.solveAndRetryLoginPost(ctx, l, rawURL, encoded, headers, secrets)
 	}
-	return e.checkErrors(def.Login, rawURL, body, status, secrets)
+	return e.checkErrors(l, rawURL, body, status, secrets)
 }
 
 // solveAndRetryLoginPost clears an anti-bot challenge on a login POST by GET-solving
@@ -140,9 +150,9 @@ func (e *Executor) postForm(ctx context.Context, def *loader.Definition, target 
 // when no solver is configured (or the solve declines) and when the retried POST is
 // still challenged, mirroring fetchLandingPastAntiBot. Credentials are never echoed.
 func (e *Executor) solveAndRetryLoginPost(ctx context.Context, l *loader.Login, rawURL, postData string, headers map[string][]string, secrets []string) error {
-	if err := e.SolveHost(ctx, rawURL); err != nil {
+	if err := e.solveHost(ctx, rawURL); err != nil {
 		// Keep the concrete cause (no solver configured vs a redacted solver outage)
-		// so an incident can be triaged; SolveHost's errors carry no secret.
+		// so an incident can be triaged; solveHost's errors carry no secret.
 		return fmt.Errorf("%w: the login POST is guarded by an anti-bot challenge: %w", ErrSolverRequired, err)
 	}
 	body, status, err := e.do(ctx, stdhttp.MethodPost, rawURL, strings.NewReader(postData), headers)
