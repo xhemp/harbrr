@@ -139,3 +139,42 @@ func setCacheValidators(w http.ResponseWriter, etag string, expiresAt, now time.
 	maxAge := max(int(expiresAt.Sub(now).Seconds()), 0)
 	w.Header().Set("Cache-Control", "private, max-age="+strconv.Itoa(maxAge))
 }
+
+// servedPage is the page of releases the handler is about to serialize — the content
+// the revalidator's served ETag needs to track (servedPayloadETag+pagedETag), not the
+// cache layer's pre-page, pre-filter payload.
+type servedPage struct {
+	releases []*normalizer.Release
+	offset   int
+	limit    int
+}
+
+// revalidate is the conditional-GET 304 protocol for a cache-backed feed response — the
+// single place the "never answer a 304 with the wrong feed-variant or page body" hazard
+// is decided, so it can be tested directly rather than only through the full handler.
+//
+// When ci reports no cached entry, or the served page fails to hash, it writes nothing
+// and returns false: the caller falls through to serializing the full body. Otherwise it
+// computes and emits the served validators — servedPayloadETag(page, bypass) folded with
+// page's offset/limit via pagedETag, ExpiresAt for Cache-Control's max-age — so the
+// response always carries them, even on a 200. It then answers 304 (handled=true, nothing
+// more written) only when fresh does not force a live body AND requestHeaders'
+// If-None-Match matches the JUST-EMITTED validator; the fold means a client revalidating
+// one variant/page can never match another's, so it always falls through to 200 with the
+// live body instead of a 304 for the wrong content.
+func (h *handler) revalidate(w http.ResponseWriter, requestHeaders http.Header, ci CacheInfo, page servedPage, bypass, fresh bool) (handled bool) {
+	if !ci.Cached {
+		return false
+	}
+	view, ok := servedPayloadETag(page.releases, bypass)
+	if !ok {
+		return false
+	}
+	etag := pagedETag(view, page.offset, page.limit)
+	setCacheValidators(w, etag, ci.ExpiresAt, h.clock())
+	if fresh || !ifNoneMatchMatches(requestHeaders.Get("If-None-Match"), etag) {
+		return false
+	}
+	w.WriteHeader(http.StatusNotModified)
+	return true
+}

@@ -95,6 +95,70 @@ func TestCacheInfoSinkRoundTrip(t *testing.T) {
 	RecordCacheInfo(context.Background(), CacheInfo{Cached: true})
 }
 
+// revalidateHandler is a minimal handler for driving revalidate directly (no provider,
+// no HTTP routing) — only the clock it reads for Cache-Control's max-age matters.
+func revalidateHandler() *handler {
+	return &handler{clock: func() time.Time { return feedClock }}
+}
+
+// TestRevalidateWrongVariantOrPageGuard is the DIRECT test for the documented
+// "never answer a 304 with the wrong feed-variant or page body" hazard (handler.go's
+// writeResults doc comment) — the composed decision that, before the revalidator
+// extraction, was reachable only end-to-end (full handler + fake indexer + cache
+// decorator, as TestFreeleechBypassETagDistinct and TestFeedConditionalGetPagingAware
+// still exercise). It drives h.revalidate in isolation to prove the guard directly.
+func TestRevalidateWrongVariantOrPageGuard(t *testing.T) {
+	t.Parallel()
+	h := revalidateHandler()
+	ci := CacheInfo{Cached: true, ExpiresAt: feedClock.Add(5 * time.Minute)}
+	releases := []*normalizer.Release{
+		demoRelease("P0", "https://rich.test/dl/0.torrent", []int{2000}),
+		demoRelease("P1", "https://rich.test/dl/1.torrent", []int{2000}),
+	}
+	honorPage0 := servedPage{releases: releases, offset: 0, limit: 1}
+	honorPage1 := servedPage{releases: releases, offset: 1, limit: 1}
+
+	// Capture the honor variant's page-0 served ETag (no If-None-Match yet, so this
+	// call only sets validators and reports handled=false).
+	rec := httptest.NewRecorder()
+	if handled := h.revalidate(rec, http.Header{}, ci, honorPage0, false, false); handled {
+		t.Fatal("first call unexpectedly answered 304 (no If-None-Match to match)")
+	}
+	honorPage0ETag := rec.Header().Get("ETag")
+	if honorPage0ETag == "" {
+		t.Fatal("expected a served ETag to be set")
+	}
+	ifNoneMatch := http.Header{"If-None-Match": {honorPage0ETag}}
+
+	// The /full bypass variant, same page window, revalidated with the honor variant's
+	// ETag: must NOT be 304 — the bypass fold keeps the two variants distinct even
+	// though they hash the same underlying releases slice.
+	recBypass := httptest.NewRecorder()
+	if handled := h.revalidate(recBypass, ifNoneMatch, ci, honorPage0, true, false); handled {
+		t.Error("bypass variant revalidated with the honor variant's ETag was wrongly answered 304")
+	}
+	if recBypass.Header().Get("ETag") == honorPage0ETag {
+		t.Error("bypass variant's served ETag must differ from the honor variant's")
+	}
+
+	// The honor variant's page 1, revalidated with page 0's ETag: must NOT be 304 — the
+	// page-window fold keeps the two pages distinct.
+	recPage1 := httptest.NewRecorder()
+	if handled := h.revalidate(recPage1, ifNoneMatch, ci, honorPage1, false, false); handled {
+		t.Error("page 1 revalidated with page 0's ETag was wrongly answered 304")
+	}
+	if recPage1.Header().Get("ETag") == honorPage0ETag {
+		t.Error("page 1's served ETag must differ from page 0's")
+	}
+
+	// Sanity: the SAME variant and page, revalidated with its own just-emitted ETag,
+	// DOES 304 — the guard rejects only a cross-variant/cross-page match, not every match.
+	recSame := httptest.NewRecorder()
+	if handled := h.revalidate(recSame, ifNoneMatch, ci, honorPage0, false, false); !handled {
+		t.Error("same variant+page revalidated with its own ETag should be answered 304")
+	}
+}
+
 // feedDo drives a feed request against a cache-recording indexer, with optional
 // request headers, returning the recorder.
 func feedDo(t *testing.T, idx *fakeIndexer, rawQuery string, hdr http.Header) *httptest.ResponseRecorder {

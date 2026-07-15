@@ -407,23 +407,16 @@ func (h *handler) writeResults(w http.ResponseWriter, r *http.Request, idx Index
 		h.writeInternalError(w, "search", idx.Info().ID, err)
 		return
 	}
-	// When the response came through the cache, emit validators and honor a matching
-	// If-None-Match with 304 — unless the client forced a fresh fetch (header or query).
-	// The served validator hashes the POST-filter page the freeleech view actually serves
-	// (not the cache's pre-filter payload) and folds in both the freeleech-bypass variant
-	// and this page's window (servedPayloadETag + pagedETag): the honor feed and the /full
-	// bypass feed share one cached entry, and the payload ETag is page-independent, so
-	// without these folds a revalidation of one feed/page could be answered 304 with
-	// another variant's or page's body.
-	if ci.Cached {
-		if view, ok := servedPayloadETag(res.Releases, freeleechBypass(ctx)); ok {
-			etag := pagedETag(view, res.Offset, res.Limit)
-			setCacheValidators(w, etag, ci.ExpiresAt, h.clock())
-			if !headerFresh && !wantsNoCache(q) && ifNoneMatchMatches(r.Header.Get("If-None-Match"), etag) {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-		}
+	// revalidate owns the full conditional-GET 304 protocol, including the "never answer
+	// a 304 with the wrong feed-variant or page body" guard: the served validator hashes
+	// the POST-filter page the freeleech view actually serves (not the cache's pre-filter
+	// payload) and folds in both the freeleech-bypass variant and this page's window, so
+	// the honor feed and the /full bypass feed sharing one cached entry can never
+	// cross-match. fresh (header or query) forces a live body even on a match.
+	sp := servedPage{releases: res.Releases, offset: res.Offset, limit: res.Limit}
+	fresh := headerFresh || wantsNoCache(q)
+	if h.revalidate(w, r.Header, *ci, sp, freeleechBypass(ctx), fresh) {
+		return
 	}
 	page := tzn.Page{Offset: res.Offset, Total: res.Total}
 	body, err := tzn.MarshalResultsRewritten(h.feedInfo(r, idx), res.Releases, page, h.clock(), h.dlRewriter(r, idx))
