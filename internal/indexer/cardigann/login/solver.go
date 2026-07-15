@@ -132,7 +132,7 @@ func setHeaderIfAbsent(h map[string][]string, key, val string) {
 	}
 }
 
-// SolveHost clears an anti-bot interstitial for rawURL's host by asking the
+// solveHost clears an anti-bot interstitial for rawURL's host by asking the
 // configured solver and seeding what it returns (cookies + the bound User-Agent)
 // into the session, so SUBSEQUENT requests reuse a fresh host-scoped
 // cf_clearance. Its caller is solveAndRetryLoginPost (methods.go): the form and
@@ -141,7 +141,7 @@ func setHeaderIfAbsent(h map[string][]string, key, val string) {
 // the default NoopSolver (or a solver that declines) it returns
 // ErrNoSolverConfigured, which the caller surfaces as ErrSolverRequired. It
 // never fetches; it only seeds.
-func (e *Executor) SolveHost(ctx context.Context, rawURL string) error {
+func (e *Executor) solveHost(ctx context.Context, rawURL string) error {
 	res, err := e.solver().Solve(ctx, rawURL)
 	if err != nil {
 		return err //nolint:wrapcheck // sentinel (ErrNoSolverConfigured) the caller branches on.

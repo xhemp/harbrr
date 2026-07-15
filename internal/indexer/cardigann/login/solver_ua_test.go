@@ -59,8 +59,8 @@ func TestSolveHost_SeedsCookiesAndPersistsUA(t *testing.T) {
 		}),
 	)
 
-	if err := e.SolveHost(t.Context(), "https://t.invalid/"); err != nil {
-		t.Fatalf("SolveHost: %v", err)
+	if err := e.solveHost(t.Context(), "https://t.invalid/"); err != nil {
+		t.Fatalf("solveHost: %v", err)
 	}
 	if e.Session().UserAgent != "Mozilla/5.0 (solver)" {
 		t.Errorf("Session().UserAgent = %q, want the solver UA", e.Session().UserAgent)
@@ -81,8 +81,8 @@ func TestSolveHost_SeedsCookiesAndPersistsUA(t *testing.T) {
 func TestSolveHost_NoSolverDeclines(t *testing.T) {
 	t.Parallel()
 	e := New(WithClient(&uaRecordingDoer{}), WithBaseURL("https://t.invalid/")) // default NoopSolver
-	if err := e.SolveHost(t.Context(), "https://t.invalid/"); !errors.Is(err, ErrNoSolverConfigured) {
-		t.Errorf("SolveHost err = %v, want ErrNoSolverConfigured", err)
+	if err := e.solveHost(t.Context(), "https://t.invalid/"); !errors.Is(err, ErrNoSolverConfigured) {
+		t.Errorf("solveHost err = %v, want ErrNoSolverConfigured", err)
 	}
 	if ua := e.Session().UserAgent; ua != "" {
 		t.Errorf("Session().UserAgent = %q, want empty when no solve occurred", ua)

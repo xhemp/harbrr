@@ -226,7 +226,8 @@ func (e *Executor) resolveFormTarget(l *loader.Login, form *goquery.Selection, l
 }
 
 // postFormAbsolute POSTs an already-resolved absolute target, then runs the
-// error selectors. Distinct from postForm (methods.go), which resolves a
+// error selectors (or clears an anti-bot challenge first — see
+// submitLoginPost). Distinct from postForm (methods.go), which resolves a
 // definition path; the form flow has already resolved its target via the form
 // action.
 //
@@ -235,19 +236,7 @@ func (e *Executor) resolveFormTarget(l *loader.Login, form *goquery.Selection, l
 func (e *Executor) postFormAbsolute(ctx context.Context, l *loader.Login, target string, pairs url.Values, secrets []string) error {
 	headers := mergeFormHeaders(l.Headers)
 	encoded := pairs.Encode()
-	body, status, err := e.do(ctx, "POST", target, strings.NewReader(encoded), headers)
-	if err != nil {
-		return err
-	}
-	// The submit POST itself can be anti-bot challenged even when the landing GET
-	// was not (or the clearance lapsed between the two). Without this check the
-	// challenge page sails through checkErrors (no 401, no error-selector match)
-	// as a SILENT false success with no session cookies. Clear it exactly like
-	// postForm does: GET-solve the same URL, then retry the POST.
-	if detectAntiBot(body) != nil {
-		return e.solveAndRetryLoginPost(ctx, l, target, encoded, headers, secrets)
-	}
-	return e.checkErrors(l, target, body, status, secrets)
+	return e.submitLoginPost(ctx, l, target, encoded, headers, secrets)
 }
 
 // selectorMatches reports whether sel matches at least one element in body. Used
