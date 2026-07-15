@@ -341,9 +341,10 @@ func TestPerInstanceCountersIsolate(t *testing.T) {
 	if hits != 1 || misses != 1 || sup != 0 {
 		t.Fatalf("instance counters = %d/%d/%d, want 1/1/0", hits, misses, sup)
 	}
-	// An unseen instance reports zeroes.
+	// counters() zero-initializes a freshly created counter set (creating it
+	// on first use), so an instance with no recorded traffic reads 0/0/0.
 	uic := sc.counters(instID + 999)
 	if h, m, s := uic.hits.Load(), uic.misses.Load(), uic.suppressed.Load(); h != 0 || m != 0 || s != 0 {
-		t.Fatalf("unseen instance = %d/%d/%d, want zeroes", h, m, s)
+		t.Fatalf("fresh counters = %d/%d/%d, want zeroes", h, m, s)
 	}
 }
