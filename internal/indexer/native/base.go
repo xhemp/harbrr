@@ -264,3 +264,64 @@ func TestViaSearch(ctx context.Context, s Searcher) error {
 	_, err := s.Search(ctx, search.Query{})
 	return err
 }
+
+// Scrub returns s with every configured secret value redacted: the definition's
+// IsSecret-derived config values (loader.SecretValues over b.Def.Settings/b.Cfg)
+// plus any extra values the driver supplies — a non-IsSecret field it still submits
+// to the tracker (e.g. a username forced into the header/body alongside a real
+// secret), or a secret held OUTSIDE b.Cfg (a runtime-rotated session token, a
+// typed field cached at construction). It is a native driver's one value-scrub
+// chokepoint, replacing the ~13 hand-rolled per-driver ReplaceAll idioms this
+// consolidates: same IsSecret-derived correctness the login stage already has,
+// the same "[redacted]" placeholder, and the longest-first substring safety
+// apphttp.ScrubValues applies unconditionally (previously only passthepopcorn
+// bothered to sort).
+//
+// Precondition: b.Cfg is read here WITHOUT synchronization, matching Base's
+// documented contract that Cfg is wired once by NewBase and read-only afterwards.
+// A driver that mutates its own Cfg post-construction (GazelleGames, whose
+// on-demand download passkey is persisted back into Cfg under its own mutex) MUST
+// NOT call Scrub/ScrubErr directly — it needs its own lock-protected snapshot
+// before deriving the secret set.
+func (b *Base) Scrub(s string, extra ...string) string {
+	secrets := loader.SecretValues(b.Def.Settings, b.Cfg)
+	if len(extra) > 0 {
+		secrets = append(secrets, extra...)
+	}
+	return apphttp.ScrubValues(s, secrets)
+}
+
+// scrubbedError is an error whose displayed message has been value-scrubbed, while
+// preserving errors.Is/As traversal to the ORIGINAL error's chain via Unwrap. The
+// naive replacement this displaces — scrub the message, then errors.New(msg) — is a
+// latent sentinel drop: passthepopcorn and torrentday's prior scrubError both did
+// exactly this, so a scrubbed 401 silently stopped satisfying
+// errors.Is(err, login.ErrLoginFailed) (the registry's auth_failure health-event
+// classification) the moment a credential actually appeared in the message and got
+// redacted. Keeping Unwrap pointed at the original error — never rebuilding a fresh
+// errors.New — means the sentinel is always still reachable, however deep it is
+// wrapped in the original's own chain.
+type scrubbedError struct {
+	msg string
+	err error
+}
+
+func (e *scrubbedError) Error() string { return e.msg }
+func (e *scrubbedError) Unwrap() error { return e.err }
+
+// ScrubErr is Scrub for an error: it redacts err's message and, only when scrubbing
+// actually changed it, wraps the result in scrubbedError so errors.Is/errors.As
+// still traverse to err's own sentinel (login.ErrLoginFailed, *search.
+// RateLimitedError, context.Canceled, ...). A nil err returns nil; an err whose
+// message carried no configured secret is returned UNCHANGED (no wrapper, so its
+// identity/type is untouched for a caller that compares it directly).
+func (b *Base) ScrubErr(err error, extra ...string) error {
+	if err == nil {
+		return nil
+	}
+	msg := b.Scrub(err.Error(), extra...)
+	if msg == err.Error() {
+		return err
+	}
+	return &scrubbedError{msg: msg, err: err}
+}

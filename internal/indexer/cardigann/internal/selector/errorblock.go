@@ -30,7 +30,8 @@ import (
 // but the extracted TEXT is lifted from the server's RESPONSE body (server-controlled), so
 // it can echo a submitted credential. Any caller that SURFACES the message MUST value-scrub
 // its own secrets out of it first: both do — the login stage in checkErrors and the search
-// stage in checkSearchError, each via login.ScrubSecrets over the IsSecret-derived values.
+// stage in checkSearchError, each via apphttp.ScrubValues over loader.SecretValues'
+// IsSecret-derived values.
 // eval is the template-eval seam for this call, threaded through to every
 // Field lookup below; nil defaults to identity.
 func (e *Engine) CheckErrorBlocks(root Row, blocks []loader.ErrorBlock, eval EvalFunc) (message string, matched bool, err error) {

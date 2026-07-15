@@ -208,7 +208,7 @@ func (e *Executor) checkErrors(l *loader.Login, rawURL string, body []byte, stat
 		return fmt.Errorf("checking login error selectors from %s: %w", apphttp.SchemeHost(rawURL), err)
 	}
 	if matched {
-		return fmt.Errorf("%w: %s (from %s)", ErrLoginFailed, ScrubSecrets(msg, secrets), apphttp.SchemeHost(rawURL))
+		return fmt.Errorf("%w: %s (from %s)", ErrLoginFailed, apphttp.ScrubValues(msg, secrets), apphttp.SchemeHost(rawURL))
 	}
 	return nil
 }
@@ -218,9 +218,9 @@ func (e *Executor) checkErrors(l *loader.Login, rawURL string, body []byte, stat
 // (SettingsField.IsSecret) over THIS definition's settings — never a hardcoded key
 // list, which would miss a def's differently-named credential field (e.g.
 // Bittorrentfiles' `pass`, type: password). username is not classified secret, so it
-// is preserved (a legitimate "no such user 'dave'" survives). See SecretConfigValues.
+// is preserved (a legitimate "no such user 'dave'" survives). See loader.SecretValues.
 func (e *Executor) loginSecrets(def *loader.Definition) []string {
-	return SecretConfigValues(def.Settings, e.config)
+	return loader.SecretValues(def.Settings, e.config)
 }
 
 // mergeFormHeaders returns the login headers with a form-urlencoded Content-Type

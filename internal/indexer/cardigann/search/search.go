@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/text/encoding"
 
+	apphttp "github.com/autobrr/harbrr/internal/http"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/internal/selector"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
@@ -206,8 +207,8 @@ func parseDocument(eng *selector.Engine, body []byte, respType string) (*selecto
 // RESPONSE body, so a page that echoes a submitted secret (passkey/apikey/rsskey in
 // the search request) would leak it into the returned error / log sink. It is
 // value-scrubbed of the configured credentials — derived from the loader's IsSecret
-// classifier over the def's settings, the SAME mechanism the login stage uses (see
-// login.SecretConfigValues) — before it is wrapped.
+// classifier over the def's settings via loader.SecretValues, the SAME mechanism the
+// login stage uses — before it is wrapped.
 func checkSearchError(def *loader.Definition, doc *selector.Document, respType string, eng *selector.Engine, config map[string]string) error {
 	if respType == responseTypeJSON || respType == responseTypeXML || len(def.Search.Error) == 0 {
 		return nil
@@ -220,7 +221,7 @@ func checkSearchError(def *loader.Definition, doc *selector.Document, respType s
 		return fmt.Errorf("evaluating search error selectors: %w", err)
 	}
 	if matched {
-		scrubbed := login.ScrubSecrets(msg, login.SecretConfigValues(def.Settings, config))
+		scrubbed := apphttp.ScrubValues(msg, loader.SecretValues(def.Settings, config))
 		return fmt.Errorf("%w: Error: %s", ErrTrackerError, scrubbed)
 	}
 	return nil
