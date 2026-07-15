@@ -107,6 +107,9 @@ internal/
       loader/ mapper/ dateparse/ login/ search/ normalizer/   # pipeline stages
       internal/          # engine-private support: template/ selector/ regexadapter/ encode/
       parity/            # differential-vs-Jackett harness — the correctness gate
+    core/                # the indexer serving contract: Indexer/Provider/IndexerInfo/CacheInfo + the
+                         #   shared SearchReleases read pipeline — the indexer as the rest of harbrr
+                         #   consumes it, independent of transport (see ADR-0002)
     definitions/         # //go:embed vendored Jackett snapshot: vendor/ (read-only) + dropin/ (user overrides)
     native/              # bespoke Go drivers for trackers Cardigann YAML can't express
                          #   (avistaz, hdbits, gazelle, iptorrents, myanonamouse, filelist, …) + newznab base
@@ -114,7 +117,8 @@ internal/
   web/
     api/                 # chi router + management-API handlers (indexers, appsync, announce, auth, stats, …)
     swagger/             # hand-authored openapi.yaml (//go:embed) + Swagger UI + drift test
-    torznabhttp/         # the served Torznab feed endpoint (query, download-token, cache, export)
+    torznabhttp/         # HTTP/XML serving over core.Indexer: routing, request parsing, the 304
+                         #   revalidator, download-token, DL-proxy URL helpers
   appsync/               # sync indexers into the *arr apps (sonarr/radarr/lidarr/readarr/whisparr) + qui
   announce/              # push newly-scraped releases to autobrr / cross-seed v6 / qui
   http/                  # HTTP seam: log/trace redaction, decode-error and transport-error shaping
