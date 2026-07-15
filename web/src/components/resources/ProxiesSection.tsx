@@ -53,7 +53,7 @@ export function ProxiesSection() {
                 aria-label={`Delete ${p.name}`}
                 onClick={() => remove.mutate(p.id, {
                   onSuccess: () => notifySuccess(`${p.name} deleted`),
-                  onError: () => notifyError(`Deleting ${p.name} failed`),
+                  onError: (err) => notifyError(`Deleting ${p.name} failed`, err),
                 })}
               >
                 <Trash2 className="h-4 w-4" />

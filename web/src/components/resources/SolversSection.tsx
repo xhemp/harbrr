@@ -51,7 +51,7 @@ export function SolversSection() {
                 aria-label={`Delete ${s.name}`}
                 onClick={() => remove.mutate(s.id, {
                   onSuccess: () => notifySuccess(`${s.name} deleted`),
-                  onError: () => notifyError(`Deleting ${s.name} failed`),
+                  onError: (err) => notifyError(`Deleting ${s.name} failed`, err),
                 })}
               >
                 <Trash2 className="h-4 w-4" />

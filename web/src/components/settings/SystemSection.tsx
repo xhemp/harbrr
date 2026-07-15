@@ -39,7 +39,7 @@ function LoggingBlock() {
           value={level.data?.level ?? "info"}
           onChange={(e) => setLevel.mutate(e.target.value as LogLevel, {
             onSuccess: (r) => notifySuccess(`Log level set to ${r.level}`),
-            onError: () => notifyError("Setting the log level failed"),
+            onError: (err) => notifyError("Setting the log level failed", err),
           })}
         >
           {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}

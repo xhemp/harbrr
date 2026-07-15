@@ -67,6 +67,29 @@ func TestPostFrontendLogValidation(t *testing.T) {
 	}
 }
 
+// frontendLogEntry is the typed shape of the single zerolog line the handler writes.
+// Context is a pointer so "field absent" (nil) is distinguishable from "field empty".
+type frontendLogEntry struct {
+	Level     string  `json:"level"`
+	Component string  `json:"component"`
+	Message   string  `json:"message"`
+	Context   *string `json:"context"`
+}
+
+// decodeSingleLogLine asserts buf holds exactly one log line and decodes it.
+func decodeSingleLogLine(t *testing.T, buf *bytes.Buffer) frontendLogEntry {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected exactly one log line, got %d: %q", len(lines), buf.String())
+	}
+	var entry frontendLogEntry
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("decode log line: %v (line: %s)", err, lines[0])
+	}
+	return entry
+}
+
 // TestPostFrontendLogWritesLogEntry proves the handler actually relays the toast into
 // the daemon's zerolog stream at the requested level, tagged component=webui, and that
 // an absent context omits the field rather than writing it empty. It pins the global
@@ -87,19 +110,7 @@ func TestPostFrontendLogWritesLogEntry(t *testing.T) {
 		frontendLogReq{Level: "error", Message: "add indexer failed", Context: "network error"}, nil)
 	mustStatus(t, resp, body, http.StatusNoContent)
 
-	var entry struct {
-		Level     string `json:"level"`
-		Component string `json:"component"`
-		Message   string `json:"message"`
-		Context   string `json:"context"`
-	}
-	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected exactly one log line, got %d: %q", len(lines), buf.String())
-	}
-	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
-		t.Fatalf("decode log line: %v (line: %s)", err, lines[0])
-	}
+	entry := decodeSingleLogLine(t, &buf)
 	if entry.Level != "error" {
 		t.Errorf("level = %q, want error", entry.Level)
 	}
@@ -109,8 +120,8 @@ func TestPostFrontendLogWritesLogEntry(t *testing.T) {
 	if entry.Message != "add indexer failed" {
 		t.Errorf("message = %q, want %q", entry.Message, "add indexer failed")
 	}
-	if entry.Context != "network error" {
-		t.Errorf("context = %q, want %q", entry.Context, "network error")
+	if entry.Context == nil || *entry.Context != "network error" {
+		t.Errorf("context = %v, want %q", entry.Context, "network error")
 	}
 }
 
@@ -131,15 +142,17 @@ func TestPostFrontendLogOmitsEmptyContext(t *testing.T) {
 		frontendLogReq{Level: "warn", Message: "slow response"}, nil)
 	mustStatus(t, resp, body, http.StatusNoContent)
 
-	var entry map[string]any
-	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected exactly one log line, got %d: %q", len(lines), buf.String())
+	entry := decodeSingleLogLine(t, &buf)
+	if entry.Level != "warn" {
+		t.Errorf("level = %q, want warn", entry.Level)
 	}
-	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
-		t.Fatalf("decode log line: %v (line: %s)", err, lines[0])
+	if entry.Component != "webui" {
+		t.Errorf("component = %q, want webui", entry.Component)
 	}
-	if _, ok := entry["context"]; ok {
-		t.Errorf("context field present with no context sent: %v", entry)
+	if entry.Message != "slow response" {
+		t.Errorf("message = %q, want %q", entry.Message, "slow response")
+	}
+	if entry.Context != nil {
+		t.Errorf("context field present with no context sent: %q", *entry.Context)
 	}
 }

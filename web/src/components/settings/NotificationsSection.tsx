@@ -49,7 +49,7 @@ export function NotificationsSection() {
                 size="sm"
                 onClick={() => test.mutate(n.id, {
                   onSuccess: (r) => r.ok ? notifySuccess("Test notification sent") : notifyError(`Test failed — ${r.error ?? ""}`),
-                  onError: () => notifyError("Test request failed"),
+                  onError: (err) => notifyError("Test request failed", err),
                 })}
               >
                 Test

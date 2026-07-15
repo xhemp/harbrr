@@ -39,7 +39,7 @@ export function ApiKeysSection() {
               setMinted(key)
               setName("")
             },
-            onError: () => notifyError("Minting failed"),
+            onError: (err) => notifyError("Minting failed", err),
           })
         }}
       >

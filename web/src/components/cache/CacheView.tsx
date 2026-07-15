@@ -68,7 +68,7 @@ export function CacheView() {
           disabled={flush.isPending || !stats.data?.enabled}
           onClick={() => flush.mutate(undefined, {
             onSuccess: (r) => notifySuccess(`Flushed ${r.flushed} cached entries`),
-            onError: () => notifyError("Flush failed"),
+            onError: (err) => notifyError("Flush failed", err),
           })}
         >
           {flush.isPending ? "Flushing…" : "Flush cache"}
