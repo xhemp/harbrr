@@ -35,7 +35,7 @@ var liveTested = map[string]bool{
 	"seedpool-api": true, "uploadcx": true, "darkpeers-api": true,
 	// Native drivers, live-validated.
 	"iptorrents": true, "filelist": true, "myanonamouse": true, "broadcastthenet": true,
-	"passthepopcorn": true,
+	"passthepopcorn": true, "hdbits": true,
 	// Usenet, live-validated against the deployed fix build (differential 100=100 vs
 	// Prowlarr): the generic Newznab driver via the dognzb preset (search + a real .nzb
 	// grab through /dl), and the NZBIndex native driver (search).
