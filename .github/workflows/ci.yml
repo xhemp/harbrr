@@ -23,6 +23,10 @@ permissions:
 
 env:
   GO_VERSION: 1.26.5
+  # A stalled cache-blob download (0 MB/s mid-transfer, seen from the self-hosted
+  # fleet) otherwise hangs for actions/cache's default 10-minute segment timeout
+  # before falling back to a miss. Give up after 2 and take the miss.
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
 
 # Cancel superseded runs on a PR branch; never cancel main-branch history.
 concurrency:
@@ -99,15 +103,21 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      # Module cache is identical across shards, so key it on go.sum only (not the shard):
-      # the 3 shards share ONE entry instead of each storing a duplicate copy, easing the
-      # ~10GB per-repo cache LRU. Concurrent same-key saves from parallel shards no-op.
+      # The module cache key MUST include the shard: each shard only downloads the
+      # modules its packages need, so with a shared key whichever shard saved first
+      # pinned a PARTIAL cache for that go.sum (same-key saves no-op), and the other
+      # shards re-downloaded their missing modules at test time on every run — one
+      # proxy.golang.org blip then fails the job ("kin-openapi: TLS handshake
+      # timeout", re-run passes). Per-shard entries are ~17MB each — noise against
+      # the ~10GB per-repo LRU. restore-keys still seeds a new go.sum's entry from
+      # any older/sibling entry, so each shard converges to complete in one run.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /home/ci/go/pkg/mod
-          key: alpine-gomod-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          key: alpine-gomod-${{ matrix.shard.name }}-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            alpine-gomod-${{ env.GO_VERSION }}-
+            alpine-gomod-${{ matrix.shard.name }}-${{ env.GO_VERSION }}-
+            alpine-gomod-
       # Build cache is shard-specific (each shard compiles a different package set) — keep
       # it per-shard for a warm incremental compile.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
