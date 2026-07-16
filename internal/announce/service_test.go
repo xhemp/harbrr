@@ -1,8 +1,10 @@
 package announce_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -225,5 +227,45 @@ func TestServicePushSwallowsErrors(t *testing.T) {
 	})
 	if matched != 0 {
 		t.Errorf("matched = %d, want 0 (the announce errored)", matched)
+	}
+}
+
+// TestServicePushFailureRedactsGUID pins #230: the push-failure warn logs the release
+// GUID, and for passkey-in-GUID trackers (FileList-style) the GUID is the
+// credential-bearing download URL — it must log scrubbed, never in cleartext.
+func TestServicePushFailureRedactsGUID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	kr, err := secrets.OpenKeyring(secrets.KeyringOptions{EncryptionKey: testKey}, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("keyring: %v", err)
+	}
+	var buf bytes.Buffer
+	svc := announce.NewService(db, auth.NewService(db), kr, func(domain.AnnounceConnection, string) (announce.Target, error) {
+		return &fakeTarget{err: errors.New("boom")}, nil
+	}, zerolog.New(&buf))
+	if _, err := svc.CreateConnection(ctx, announce.CreateConnectionParams{
+		Name: "qui", Kind: domain.AnnounceKindQui, BaseURL: "http://qui:7476", APIKey: "k", HarbrrURL: "http://h:8787",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	const secret = "SECRETPASSKEY123" //nolint:gosec // G101: synthetic test passkey
+	svc.Push(ctx, func(domain.AnnounceConnection) []announce.Release {
+		return []announce.Release{{Name: "X", GUID: "https://tracker.example/download.php?id=1&passkey=" + secret}}
+	})
+	logged := buf.String()
+	if !strings.Contains(logged, "push failed") {
+		t.Fatalf("expected a push-failed warn, got %q", logged)
+	}
+	if strings.Contains(logged, secret) {
+		t.Errorf("log leaks the passkey: %q", logged)
 	}
 }

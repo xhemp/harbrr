@@ -14,6 +14,7 @@ import (
 	"github.com/autobrr/harbrr/internal/database"
 	"github.com/autobrr/harbrr/internal/database/dbinterface"
 	"github.com/autobrr/harbrr/internal/domain"
+	apphttp "github.com/autobrr/harbrr/internal/http"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
 	"github.com/autobrr/harbrr/internal/indexer/registry"
 	"github.com/autobrr/harbrr/internal/secrets"
@@ -160,9 +161,11 @@ func announceReleasesFor(conn domain.AnnounceConnection, svc *announce.Service, 
 		if dl == "" && s.link != "" {
 			sealed, serr := torznabhttp.SealedDLURL(keyring, slug, dlBase, harbrrKey, s.link)
 			if serr != nil {
-				// The error never carries the link; log non-secret context so a dropped
-				// release is debuggable rather than vanishing silently.
-				log.Warn().Int64("connection_id", conn.ID).Str("indexer", slug).Str("guid", s.guid).
+				// The error never carries the link, and the guid is scrubbed: for
+				// passkey-in-GUID trackers (FileList-style) the guid IS the
+				// credential-bearing download URL (#230).
+				log.Warn().Int64("connection_id", conn.ID).Str("indexer", slug).
+					Str("guid", apphttp.RedactURL(s.guid)).
 					Msg("announce: seal /dl link failed; skipping release")
 				continue
 			}

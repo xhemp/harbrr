@@ -208,7 +208,9 @@ func (s *Service) pushOne(ctx context.Context, conn domain.AnnounceConnection, r
 	for _, rel := range rels {
 		res, err := target.Announce(ctx, rel)
 		if err != nil {
-			s.log.Warn().Int64("connection_id", conn.ID).Str("guid", rel.GUID).
+			// The guid is scrubbed: for passkey-in-GUID trackers (FileList-style)
+			// it IS the credential-bearing download URL (#230).
+			s.log.Warn().Int64("connection_id", conn.ID).Str("guid", apphttp.RedactURL(rel.GUID)).
 				Str("error", apphttp.RedactError(err)).Msg("announce: push failed")
 			continue
 		}
