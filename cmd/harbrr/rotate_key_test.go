@@ -141,7 +141,7 @@ func seedAllSurfaces(t *testing.T, db *database.DB, kr *secrets.Keyring) []surfa
 	ctx := context.Background()
 
 	px, err := proxy.NewService(db, kr).Create(ctx, proxy.CreateParams{
-		Name: "p", Type: domain.ProxyTypeHTTP, URL: "http://user:pass@proxy:8080",
+		Name: "p", Type: domain.ProxyTypeHTTP, Host: "proxy", Port: 8080, Username: "user", Password: "pass",
 	})
 	if err != nil {
 		t.Fatalf("seed proxy: %v", err)
@@ -169,7 +169,7 @@ func seedAllSurfaces(t *testing.T, db *database.DB, kr *secrets.Keyring) []surfa
 		 VALUES (1,'nc','cross-seed','http://xseed',?,'http://h',?,?,?,?)`)
 
 	return []surfaceSecret{
-		{table: "proxies", col: "url_encrypted", setting: domain.ProxySecretURL, id: px.ID, want: "http://user:pass@proxy:8080"},
+		{table: "proxies", col: "password_encrypted", setting: domain.ProxySecretPassword, id: px.ID, want: "pass"},
 		{table: "solvers", col: "url_encrypted", setting: domain.SolverSecretURL, id: sv.ID, want: "http://flare:8191"},
 		{table: "notifications", col: "url_encrypted", setting: "url", id: nt.ID, want: "http://hook/token-abc"},
 		{table: "app_connections", col: "api_key_encrypted", setting: "app", id: 1, want: "APP-KEY-app_connections"},

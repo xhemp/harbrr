@@ -200,6 +200,9 @@ func migrateResources(ctx context.Context, db *database.DB, keyring *secrets.Key
 	if err := resourcemigrate.Run(ctx, db, keyring, time.Now, log); err != nil {
 		log.Warn().Err(err).Msg("migrating inline proxy/FlareSolverr settings failed; inline settings remain in effect, will retry next boot")
 	}
+	if err := resourcemigrate.SplitProxyURLs(ctx, db, keyring, log); err != nil {
+		log.Warn().Err(err).Msg("splitting legacy proxy URLs into structured fields failed; will retry next boot")
+	}
 }
 
 // verifyCanary writes the secrets canary on first run, or verifies it on later

@@ -19,12 +19,12 @@ func TestProxyRoundTrip(t *testing.T) {
 
 	// Two-phase insert: row first (mints id), then the sealed secret.
 	id, err := repo.InsertProxy(ctx, db, domain.Proxy{
-		Name: "home", Type: domain.ProxyTypeSOCKS5, URLEncrypted: "", KeyID: "", CreatedAt: now, UpdatedAt: now,
+		Name: "home", Type: domain.ProxyTypeSOCKS5, Host: "10.0.0.9", Port: 1080, Username: "u", KeyID: "", CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
 		t.Fatalf("InsertProxy: %v", err)
 	}
-	if err := repo.SetProxySecret(ctx, db, id, "enc(url)", "key-1"); err != nil {
+	if err := repo.SetProxySecret(ctx, db, id, "enc(password)", "key-1"); err != nil {
 		t.Fatalf("SetProxySecret: %v", err)
 	}
 
@@ -32,16 +32,17 @@ func TestProxyRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProxy: %v", err)
 	}
-	if got.Name != "home" || got.Type != domain.ProxyTypeSOCKS5 || got.URLEncrypted != "enc(url)" || got.KeyID != "key-1" {
+	if got.Name != "home" || got.Type != domain.ProxyTypeSOCKS5 || got.Host != "10.0.0.9" || got.Port != 1080 ||
+		got.Username != "u" || got.PasswordEncrypted != "enc(password)" || got.KeyID != "key-1" {
 		t.Fatalf("GetProxy = %+v", got)
 	}
 
-	got.Name, got.Type, got.URLEncrypted, got.UpdatedAt = "work", domain.ProxyTypeHTTP, "enc(url2)", now.Add(time.Minute)
+	got.Name, got.Type, got.Host, got.Port, got.PasswordEncrypted, got.UpdatedAt = "work", domain.ProxyTypeHTTP, "10.0.0.10", 3128, "enc(password2)", now.Add(time.Minute)
 	if err := repo.UpdateProxy(ctx, db, got); err != nil {
 		t.Fatalf("UpdateProxy: %v", err)
 	}
 	after, _ := repo.GetProxy(ctx, db, id)
-	if after.Name != "work" || after.Type != domain.ProxyTypeHTTP || after.URLEncrypted != "enc(url2)" {
+	if after.Name != "work" || after.Type != domain.ProxyTypeHTTP || after.Host != "10.0.0.10" || after.Port != 3128 || after.PasswordEncrypted != "enc(password2)" {
 		t.Fatalf("after update = %+v", after)
 	}
 

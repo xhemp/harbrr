@@ -1597,15 +1597,16 @@ export interface components {
             url?: string;
             onHealthFailure?: boolean;
         };
-        /** @description A global, reusable proxy an indexer references by id. The URL (url) is never echoed — it reads back as the <redacted> sentinel. */
+        /** @description A global, reusable proxy an indexer references by id. host/port/username are plain (never masked); the password is a write-only secret and is never echoed back in a response. */
         Proxy: {
             /** Format: int64 */
             id: number;
             name: string;
             /** @enum {string} */
             type: "http" | "https" | "socks5" | "socks5h";
-            /** @description the proxy URL, redacted (<redacted>) */
-            url: string;
+            host: string;
+            port: number;
+            username: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1615,16 +1616,22 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "http" | "https" | "socks5" | "socks5h";
-            /** @description the proxy URL (stored encrypted; may embed user:pass) */
-            url: string;
+            host: string;
+            port: number;
+            username?: string;
+            /** @description optional; stored encrypted */
+            password?: string;
         };
         /** @description a partial update; omitted fields are left unchanged */
         UpdateProxy: {
             name?: string;
             /** @enum {string} */
             type?: "http" | "https" | "socks5" | "socks5h";
-            /** @description rotates the endpoint (stored encrypted) */
-            url?: string;
+            host?: string;
+            port?: number;
+            username?: string;
+            /** @description rotates the password (stored encrypted); omitted keeps the stored one */
+            password?: string;
         };
         /** @description A global, reusable anti-bot solver (FlareSolverr) an indexer references by id. The endpoint URL (url) is never echoed — it reads back as the <redacted> sentinel. */
         Solver: {

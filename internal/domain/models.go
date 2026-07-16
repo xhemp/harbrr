@@ -243,22 +243,33 @@ const FlareMaxTimeoutCapSeconds = 180
 // have independent id sequences, so a shared discriminator would let a proxy blob
 // and a solver blob with the same id authenticate under the same key — the type
 // is part of the AAD namespace to prevent that cross-context confusion.
+//
+// ProxySecretURL is legacy and decrypt-only (#71 split the proxy into structured
+// fields): it remains solely so the boot backfill (internal/resourcemigrate) can
+// decrypt a pre-split row's composite URL. ProxySecretPassword is the current
+// proxy secret — only the password, never the full URL.
 const (
-	ProxySecretURL  = "proxy_url"
-	SolverSecretURL = "solver_url" //nolint:gosec // G101: an AAD "setting" discriminator name, not a credential.
+	ProxySecretURL      = "proxy_url"
+	ProxySecretPassword = "proxy_password" //nolint:gosec // G101: an AAD "setting" discriminator name, not a credential.
+	SolverSecretURL     = "solver_url"     //nolint:gosec // G101: an AAD "setting" discriminator name, not a credential.
 )
 
-// Proxy is a global, reusable proxy an indexer instance references by id. The URL
-// (which routinely embeds user:pass) is the stored secret: encrypted under KeyID
-// with the proxy's own id as AAD, read back <redacted> in the API.
+// Proxy is a global, reusable proxy an indexer instance references by id. Host,
+// Port, and Username are plain (visible on read, never masked); Password is the
+// only stored secret, encrypted under KeyID with the proxy's own id as AAD. The
+// transport URL (type://[user[:pass]@]host:port) is composed where the proxy is
+// applied (internal/indexer/registry) and never stored.
 type Proxy struct {
-	ID           int64
-	Name         string
-	Type         string
-	URLEncrypted string
-	KeyID        string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                int64
+	Name              string
+	Type              string
+	Host              string
+	Port              int
+	Username          string
+	PasswordEncrypted string
+	KeyID             string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // Solver is a global, reusable anti-bot solver an indexer instance references by

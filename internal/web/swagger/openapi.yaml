@@ -2332,30 +2332,39 @@ components:
     Proxy:
       type: object
       description: >
-        A global, reusable proxy an indexer references by id. The URL (url) is never
-        echoed — it reads back as the <redacted> sentinel.
+        A global, reusable proxy an indexer references by id. host/port/username are
+        plain (never masked); the password is a write-only secret and is never
+        echoed back in a response.
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
         type: { type: string, enum: [http, https, socks5, socks5h] }
-        url: { type: string, description: "the proxy URL, redacted (<redacted>)" }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
-      required: [id, name, type, url, createdAt, updatedAt]
+      required: [id, name, type, host, port, username, createdAt, updatedAt]
     CreateProxy:
       type: object
       properties:
         name: { type: string }
         type: { type: string, enum: [http, https, socks5, socks5h] }
-        url: { type: string, description: the proxy URL (stored encrypted; may embed user:pass) }
-      required: [name, type, url]
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string, description: "optional; stored encrypted" }
+      required: [name, type, host, port]
     UpdateProxy:
       type: object
       description: a partial update; omitted fields are left unchanged
       properties:
         name: { type: string }
         type: { type: string, enum: [http, https, socks5, socks5h] }
-        url: { type: string, description: rotates the endpoint (stored encrypted) }
+        host: { type: string }
+        port: { type: integer }
+        username: { type: string }
+        password: { type: string, description: "rotates the password (stored encrypted); omitted keeps the stored one" }
     Solver:
       type: object
       description: >

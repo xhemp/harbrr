@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -32,37 +31,56 @@ func newService(t *testing.T) (*Service, *secrets.Keyring) {
 	return NewService(db, kr), kr
 }
 
-func TestCreateEncryptsURLAndRoundTrips(t *testing.T) {
+func TestCreateEncryptsPasswordAndRoundTrips(t *testing.T) {
 	t.Parallel()
 	svc, kr := newService(t)
 	ctx := context.Background()
 
-	const rawURL = "socks5://user:pass@10.0.0.9:1080"
-	p, err := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeSOCKS5, URL: rawURL})
+	p, err := svc.Create(ctx, CreateParams{
+		Name: "home", Type: domain.ProxyTypeSOCKS5, Host: "10.0.0.9", Port: 1080, Username: "user", Password: "pass",
+	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-
-	// Stored ciphertext must not be the plaintext, and must decrypt back to it under
-	// the proxy's own id (the AAD).
-	if p.URLEncrypted == rawURL || p.URLEncrypted == "" {
-		t.Fatalf("URL not encrypted at rest: %q", p.URLEncrypted)
-	}
-	got, err := kr.Decrypt(p.ID, domain.ProxySecretURL, p.URLEncrypted)
-	if err != nil || got != rawURL {
-		t.Fatalf("decrypt = %q, %v; want %q", got, err, rawURL)
+	if p.Host != "10.0.0.9" || p.Port != 1080 || p.Username != "user" {
+		t.Fatalf("structured fields not stored plainly: %+v", p)
 	}
 
-	// Update rotates the URL under the same id.
-	newURL := "http://proxy.internal:3128"
+	// Stored ciphertext must not be the plaintext, and must decrypt back to it
+	// under the proxy's own id (the AAD).
+	if p.PasswordEncrypted == "pass" || p.PasswordEncrypted == "" {
+		t.Fatalf("password not encrypted at rest: %q", p.PasswordEncrypted)
+	}
+	got, err := kr.Decrypt(p.ID, domain.ProxySecretPassword, p.PasswordEncrypted)
+	if err != nil || got != "pass" {
+		t.Fatalf("decrypt = %q, %v; want %q", got, err, "pass")
+	}
+
+	// Update rotates the password under the same id.
+	newPass := "rotated"
 	newType := domain.ProxyTypeHTTP
-	if err := svc.Update(ctx, p.ID, UpdateParams{Type: &newType, URL: &newURL}); err != nil {
+	if err := svc.Update(ctx, p.ID, UpdateParams{Type: &newType, Password: &newPass}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	after, _ := svc.Get(ctx, p.ID)
-	dec, _ := kr.Decrypt(after.ID, domain.ProxySecretURL, after.URLEncrypted)
-	if after.Type != newType || dec != newURL {
-		t.Fatalf("after update: type %q url %q", after.Type, dec)
+	dec, _ := kr.Decrypt(after.ID, domain.ProxySecretPassword, after.PasswordEncrypted)
+	if after.Type != newType || dec != newPass {
+		t.Fatalf("after update: type %q password %q", after.Type, dec)
+	}
+}
+
+func TestCreateAllowsCredentialFreeProxy(t *testing.T) {
+	t.Parallel()
+	svc, kr := newService(t)
+	ctx := context.Background()
+
+	p, err := svc.Create(ctx, CreateParams{Name: "open", Type: domain.ProxyTypeSOCKS5, Host: "10.0.0.9", Port: 1080})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	dec, err := kr.Decrypt(p.ID, domain.ProxySecretPassword, p.PasswordEncrypted)
+	if err != nil || dec != "" {
+		t.Fatalf("decrypt = %q, %v; want empty password", dec, err)
 	}
 }
 
@@ -72,10 +90,11 @@ func TestValidateRejectsBadInput(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []CreateParams{
-		{Name: "", Type: domain.ProxyTypeHTTP, URL: "http://h"},
-		{Name: "x", Type: "ftp", URL: "http://h"},
-		{Name: "x", Type: domain.ProxyTypeHTTP, URL: ""},
-		{Name: "x", Type: domain.ProxyTypeHTTP, URL: "::::"},
+		{Name: "", Type: domain.ProxyTypeHTTP, Host: "h", Port: 8080},
+		{Name: "x", Type: "ftp", Host: "h", Port: 8080},
+		{Name: "x", Type: domain.ProxyTypeHTTP, Host: "", Port: 8080},
+		{Name: "x", Type: domain.ProxyTypeHTTP, Host: "h", Port: 0},
+		{Name: "x", Type: domain.ProxyTypeHTTP, Host: "h", Port: 70000},
 	}
 	for _, c := range cases {
 		if _, err := svc.Create(ctx, c); !errors.Is(err, ErrInvalid) {
@@ -84,106 +103,56 @@ func TestValidateRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestValidateRejectsSchemeMismatch covers U11-F1: a scheme-less URL and a
-// type/scheme cross-family mismatch must be rejected at save (ErrInvalid → 400),
-// not accepted and left to fail at search time on every referencing indexer.
-func TestValidateRejectsSchemeMismatch(t *testing.T) {
-	t.Parallel()
-	svc, _ := newService(t)
-	ctx := context.Background()
-
-	cases := []struct {
-		name   string
-		params CreateParams
-	}{
-		{"socks5 type with http scheme", CreateParams{Name: "x", Type: domain.ProxyTypeSOCKS5, URL: "http://127.0.0.1:1080"}},
-		{"http type with socks5 scheme", CreateParams{Name: "x", Type: domain.ProxyTypeHTTP, URL: "socks5://127.0.0.1:1080"}},
-		{"scheme-less url", CreateParams{Name: "x", Type: domain.ProxyTypeHTTP, URL: "//127.0.0.1:3128"}},
-	}
-	for _, c := range cases {
-		if _, err := svc.Create(ctx, c.params); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s: Create err = %v, want ErrInvalid", c.name, err)
-		}
-	}
-}
-
-// TestValidateAcceptsSameFamilyScheme confirms schemes in the same transport
-// family as the type are accepted: http↔https (both http.ProxyURL) and
-// socks5↔socks5h (both proxy.FromURL) are interchangeable.
-func TestValidateAcceptsSameFamilyScheme(t *testing.T) {
-	t.Parallel()
-	svc, _ := newService(t)
-	ctx := context.Background()
-
-	cases := []CreateParams{
-		{Name: "a", Type: domain.ProxyTypeHTTP, URL: "https://proxy:8080"},        // http type, https scheme
-		{Name: "b", Type: domain.ProxyTypeSOCKS5, URL: "socks5h://10.0.0.9:1080"}, // socks5 type, socks5h scheme
-		{Name: "c", Type: domain.ProxyTypeSOCKS5, URL: "socks5://10.0.0.9:1080"},
-		{Name: "d", Type: domain.ProxyTypeHTTP, URL: "http://proxy:3128"},
-	}
-	for _, c := range cases {
-		if _, err := svc.Create(ctx, c); err != nil {
-			t.Errorf("Create(%s) err = %v, want nil", c.Name, err)
-		}
-	}
-}
-
-// TestValidateErrorHidesURLSecret asserts the rejection error carries only the
-// safe scheme token and type — never the URL's userinfo/host (it can embed
-// user:pass or a passkey).
-func TestValidateErrorHidesURLSecret(t *testing.T) {
-	t.Parallel()
-	svc, _ := newService(t)
-	ctx := context.Background()
-
-	const secret = "s3cr3t-passkey"
-	const host = "10.9.8.7:1080"
-	// Cross-family (socks5 type, http scheme) so validate rejects it.
-	_, err := svc.Create(ctx, CreateParams{
-		Name: "x", Type: domain.ProxyTypeSOCKS5,
-		URL: "http://user:" + secret + "@" + host,
-	})
-	if !errors.Is(err, ErrInvalid) {
-		t.Fatalf("Create err = %v, want ErrInvalid", err)
-	}
-	if msg := err.Error(); strings.Contains(msg, secret) || strings.Contains(msg, host) {
-		t.Errorf("error message leaks URL credentials/host: %q", msg)
-	}
-}
-
-func TestUpdateKeepsURLWhenOmitted(t *testing.T) {
+func TestUpdateKeepsPasswordWhenOmitted(t *testing.T) {
 	t.Parallel()
 	svc, kr := newService(t)
 	ctx := context.Background()
-	p, _ := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeHTTP, URL: "http://a:3128"})
+	p, _ := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeHTTP, Host: "a", Port: 3128, Password: "orig"})
 
 	name := "renamed"
 	if err := svc.Update(ctx, p.ID, UpdateParams{Name: &name}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	after, _ := svc.Get(ctx, p.ID)
-	dec, _ := kr.Decrypt(after.ID, domain.ProxySecretURL, after.URLEncrypted)
-	if after.Name != "renamed" || dec != "http://a:3128" {
-		t.Fatalf("after name-only update: name %q url %q (url should be unchanged)", after.Name, dec)
+	dec, _ := kr.Decrypt(after.ID, domain.ProxySecretPassword, after.PasswordEncrypted)
+	if after.Name != "renamed" || dec != "orig" {
+		t.Fatalf("after name-only update: name %q password %q (password should be unchanged)", after.Name, dec)
 	}
 }
 
-// TestUpdateTypeOnlyRevalidatesStoredURL: flipping the type without re-sending the
-// URL must re-check the stored URL against the new type, so a cross-family flip
-// (http url, socks5 type) is rejected at save rather than failing at search.
-func TestUpdateTypeOnlyRevalidatesStoredURL(t *testing.T) {
+// TestUpdateEmptyPasswordClearsCredential asserts Password is nil = keep,
+// non-nil (even "") = rotate — an explicit empty string clears a stored
+// password, distinct from omitting the field.
+func TestUpdateEmptyPasswordClearsCredential(t *testing.T) {
+	t.Parallel()
+	svc, kr := newService(t)
+	ctx := context.Background()
+	p, _ := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeHTTP, Host: "a", Port: 3128, Password: "orig"})
+
+	empty := ""
+	if err := svc.Update(ctx, p.ID, UpdateParams{Password: &empty}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	after, _ := svc.Get(ctx, p.ID)
+	dec, err := kr.Decrypt(after.ID, domain.ProxySecretPassword, after.PasswordEncrypted)
+	if err != nil || dec != "" {
+		t.Fatalf("after clearing password: %q, %v", dec, err)
+	}
+}
+
+func TestUpdateStructuredFields(t *testing.T) {
 	t.Parallel()
 	svc, _ := newService(t)
 	ctx := context.Background()
-	p, _ := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeHTTP, URL: "http://a:3128"})
+	p, _ := svc.Create(ctx, CreateParams{Name: "home", Type: domain.ProxyTypeHTTP, Host: "a", Port: 3128})
 
-	badType := domain.ProxyTypeSOCKS5
-	if err := svc.Update(ctx, p.ID, UpdateParams{Type: &badType}); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("type-only flip to socks5 over an http url: err = %v, want ErrInvalid", err)
+	host, username := "b", "carol"
+	port := 8080
+	if err := svc.Update(ctx, p.ID, UpdateParams{Host: &host, Port: &port, Username: &username}); err != nil {
+		t.Fatalf("Update: %v", err)
 	}
-	// A same-family type change over the stored URL is still fine.
-	okType := domain.ProxyTypeHTTPS
-	if err := svc.Update(ctx, p.ID, UpdateParams{Type: &okType}); err != nil {
-		t.Fatalf("type-only flip to https over an http url: err = %v, want nil (same family)", err)
+	after, _ := svc.Get(ctx, p.ID)
+	if after.Host != "b" || after.Port != 8080 || after.Username != "carol" {
+		t.Fatalf("after structured update: %+v", after)
 	}
 }
