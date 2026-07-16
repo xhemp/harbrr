@@ -48,6 +48,7 @@ function actions(overrides: Partial<ConnectionActions> = {}): ConnectionActions 
     onStatus: vi.fn(),
     onSelectIndexers: vi.fn(),
     onFixPort: vi.fn(),
+    onSeedAnnounceTarget: vi.fn(),
     ...overrides,
   }
 }

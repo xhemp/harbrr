@@ -476,6 +476,15 @@ export class ApiClient {
     )
   }
 
+  // Seeds a qui announce target from a qui app-connection (#72): reuses its base URL,
+  // qui API key, and harbrr URL, minting a fresh dedicated harbrr key.
+  createAnnounceTargetFromAppConnection(id: number): Promise<AnnounceConnection> {
+    return this.unwrap(
+      this.http.POST("/api/app-connections/{id}/announce-target", { params: { path: { id } } }),
+      "/api/app-connections/{id}/announce-target"
+    )
+  }
+
   // --- sync profiles (per-connection category/toggle overrides) ---
 
   listSyncProfiles(): Promise<SyncProfile[]> {

@@ -62,6 +62,38 @@ func (rt *router) createAnnounceConnection(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusCreated, toAnnounceResponse(conn))
 }
 
+// createAnnounceTargetFromAppConnection seeds a new qui announce-connection from an
+// existing qui app-connection: it reuses the app-connection's base URL, decrypted qui
+// API key, and harbrr URL, minting a fresh dedicated harbrr key for the new row (issue
+// #72 — one-click announce target, no re-entering credentials). QuiSeed rejects
+// non-qui kinds; CreateConnection's existing (kind, base_url) unique constraint
+// rejects a duplicate target with 409.
+func (rt *router) createAnnounceTargetFromAppConnection(w http.ResponseWriter, r *http.Request) {
+	id, ok := rt.connectionID(w, r)
+	if !ok {
+		return
+	}
+	appConn, err := rt.appsync.GetConnection(r.Context(), id)
+	if err != nil {
+		rt.writeServiceError(w, "seed announce target", err)
+		return
+	}
+	baseURL, apiKey, harbrrURL, err := rt.appsync.QuiSeed(r.Context(), id)
+	if err != nil {
+		rt.writeServiceError(w, "seed announce target", err)
+		return
+	}
+	conn, err := rt.announce.CreateConnection(r.Context(), announce.CreateConnectionParams{
+		Name: appConn.Name, Kind: domain.AnnounceKindQui,
+		BaseURL: baseURL, APIKey: apiKey, HarbrrURL: harbrrURL,
+	})
+	if err != nil {
+		rt.writeServiceError(w, "seed announce target", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toAnnounceResponse(conn))
+}
+
 // getAnnounceConnection returns one announce connection (tool key redacted).
 func (rt *router) getAnnounceConnection(w http.ResponseWriter, r *http.Request) {
 	id, ok := announceConnectionID(w, r)

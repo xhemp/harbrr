@@ -363,6 +363,25 @@ func (s *Service) TestConnection(ctx context.Context, id int64) error {
 	return nil
 }
 
+// QuiSeed decrypts a qui app-connection's own credentials for reuse when seeding a
+// matching announce-connection (see internal/announce). It reuses the connection's
+// existing base URL and harbrr URL as-is and rejects any non-qui kind, since only qui
+// has a matching announce-connection kind to seed.
+func (s *Service) QuiSeed(ctx context.Context, id int64) (baseURL, apiKey, harbrrURL string, err error) {
+	conn, err := s.repo.GetConnection(ctx, s.db, id)
+	if err != nil {
+		return "", "", "", fmt.Errorf("appsync: get connection: %w", err)
+	}
+	if conn.Kind != domain.AppKindQui {
+		return "", "", "", fmt.Errorf("%w: connection %d is not a qui connection", domain.ErrInvalid, id)
+	}
+	apiKey, err = s.keyring.Decrypt(conn.ID, secretApp, conn.APIKeyEncrypted)
+	if err != nil {
+		return "", "", "", fmt.Errorf("appsync: decrypt app key: %w", err)
+	}
+	return conn.BaseURL, apiKey, conn.HarbrrURL, nil
+}
+
 // driver decrypts a connection's keys and builds its Target, returning the harbrr feed
 // key separately (it is pushed into each indexer body, not used to call the app).
 func (s *Service) driver(conn domain.AppConnection) (Target, string, error) {

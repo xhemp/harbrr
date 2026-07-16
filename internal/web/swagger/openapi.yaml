@@ -840,6 +840,31 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/app-connections/{id}/announce-target:
+    post:
+      summary: Seed a qui announce target from this app-connection
+      description: >
+        One-click cross-seed setup for a qui app-connection: reuses its base URL,
+        decrypted qui API key, and harbrr URL to create a matching announce-connection
+        (kind qui), minting a fresh dedicated harbrr key for the new row. Only valid for
+        a qui app-connection; fails with 409 if a qui announce target for the same base
+        URL already exists.
+      operationId: createAnnounceTargetFromAppConnection
+      tags: [App Connections]
+      security: [{ session: [] }, { apiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "201":
+          description: the created announce connection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnnounceConnection" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /api/announce-connections:
     get:
       summary: List cross-seed announce targets

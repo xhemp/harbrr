@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/dialog"
 import { LoadError, LoadingBlock } from "@/components/ui/load-error"
 import {
+  useAnnounceConnections,
   useAppConnections,
+  useCreateAnnounceTargetFromAppConnection,
   useCreateConnection,
   useDeleteConnection,
   useSetConnectionEnabled,
@@ -47,6 +49,14 @@ function ApplicationsPage() {
   // A separate mutation instance from `update`, so a failed port fix can't
   // surface as the edit dialog's error banner.
   const fixPort = useUpdateConnection()
+  // Shared with AnnounceSection via the same query key (react-query dedupes the
+  // fetch), so this card can tell whether a qui connection already has a matching
+  // announce target without a second network round trip.
+  const announceTargets = useAnnounceConnections()
+  const seedAnnounceTarget = useCreateAnnounceTargetFromAppConnection()
+  const quiAnnounceBaseUrls = new Set(
+    (announceTargets.data ?? []).filter((t) => t.kind === "qui").map((t) => t.baseUrl)
+  )
 
   const [dialog, setDialog] = useState<ConnectionDialogState>({ open: false })
   const [statusFor, setStatusFor] = useState<number | null>(null)
@@ -98,6 +108,7 @@ function ApplicationsPage() {
               key={conn.id}
               conn={conn}
               syncing={sync.isPending && sync.variables === conn.id}
+              hasAnnounceTarget={quiAnnounceBaseUrls.has(conn.baseUrl)}
               actions={{
                 onToggle: (id, enabled) => toggle.mutate({ id, enabled }),
                 onTest: (id) => test.mutate(id, {
@@ -113,6 +124,7 @@ function ApplicationsPage() {
                 onStatus: setStatusFor,
                 onSelectIndexers: setSelectFor,
                 onFixPort: (conn, harbrrUrl) => setFixPortReq({ conn, url: harbrrUrl }),
+                onSeedAnnounceTarget: (conn) => seedAnnounceTarget.mutate(conn.id),
               }}
             />
           ))}
