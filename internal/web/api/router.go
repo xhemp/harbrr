@@ -21,6 +21,7 @@ import (
 	"github.com/autobrr/harbrr/internal/secrets"
 	"github.com/autobrr/harbrr/internal/solver"
 	"github.com/autobrr/harbrr/internal/version"
+	"github.com/autobrr/harbrr/internal/web/torznabhttp"
 )
 
 // Deps are the collaborators the management API drives.
@@ -39,9 +40,11 @@ type Deps struct {
 	// never reaches the client. Nil disables the proxy (then resolver links are
 	// withheld from the JSON response rather than served in the clear).
 	DLToken *secrets.Keyring
-	// BasePath is the externally-visible base path, used to build absolute /dl URLs
-	// (the server strips it before routing, so it must be re-added).
-	BasePath string
+	// URLConfig is the shared input for building absolute /dl and feed URLs: the
+	// externally-visible base path (the server strips it before routing, so it must be
+	// re-added), the operator-configured external origin (authoritative when set), and
+	// the trusted-proxy check gating X-Forwarded-Proto in the request-derived fallback.
+	URLConfig torznabhttp.URLConfig
 	// Cache is the search-results cache backing the /api/cache stats/flush routes.
 	// Nil means caching is disabled; those routes then report a disabled state
 	// rather than 404 (wired in a later leaf).
@@ -79,7 +82,7 @@ type router struct {
 	solver   *solver.Service
 	sessions *scs.SessionManager
 	dlToken  *secrets.Keyring
-	basePath string
+	urlCfg   torznabhttp.URLConfig
 	cache    *registry.SearchCache
 	cfg      Config
 	log      zerolog.Logger
@@ -117,7 +120,7 @@ func NewRouter(deps Deps, cfg Config) (http.Handler, error) {
 	rt := &router{
 		auth: deps.Auth, registry: deps.Registry, loader: deps.Loader, appsync: deps.AppSync,
 		announce: deps.Announce, notify: deps.Notify, proxy: deps.Proxy, solver: deps.Solver,
-		sessions: deps.Sessions, dlToken: deps.DLToken, basePath: deps.BasePath,
+		sessions: deps.Sessions, dlToken: deps.DLToken, urlCfg: deps.URLConfig,
 		cache: deps.Cache, cfg: cfg, log: deps.Logger, logLevel: deps.LogLevel,
 		allowlist: allow, trustedProxies: proxies,
 	}
