@@ -26,7 +26,7 @@ Bespoke code in Jackett/Prowlarr (no Cardigann definition); harbrr ships native 
 | IPTorrents | Session cookie (HTML scrape) | ✅ | ✅ |
 | TorrentDay | Session cookie (HTML scrape) | ✅ | ⬜ |
 | FileList | Passkey / JSON API | ✅ | ✅ |
-| HDBits | Passkey / JSON API | ✅ | ⬜ |
+| HDBits | Passkey / JSON API | ✅ | ✅ |
 | BeyondHD | Passkey / JSON API | ✅ | ⬜ |
 | MyAnonamouse | Session cookie (rotating, JSON) | ✅ | ✅ |
 | Redacted | Gazelle (cookie/key → ajax.php) | ✅ | ⬜ |
