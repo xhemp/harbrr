@@ -77,14 +77,42 @@ func apiKeyValidator(authSvc *auth.Service) func(string) bool {
 	}
 }
 
-// announcePushTimeout bounds one detached announce-push fan-out.
-const announcePushTimeout = 60 * time.Second
+// announcePushTimeoutBase is the floor for a detached announce-push batch's context — enough
+// for a handful of releases against a live target even with the per-release deadline
+// (announce.PerReleaseTimeout) applied inside the batch.
+const announcePushTimeoutBase = 30 * time.Second
 
-// maxConcurrentAnnouncePushes bounds in-flight detached pushes so a burst of RSS fills (or
-// a slow/down announce target holding goroutines for the full timeout) cannot pile up
-// without limit and starve request handling. Excess fills are dropped with a log rather
-// than queued — the next RSS poll re-derives the same "what's new" set.
+// announcePushTimeoutMax caps the scaled batch timeout so one huge fill can't hold a worker
+// (and its queue slot) forever.
+const announcePushTimeoutMax = 10 * time.Minute
+
+// maxConcurrentAnnouncePushes sizes the fixed worker pool that processes queued announce
+// pushes, bounding how many run at once so a burst of RSS fills (or a slow/down announce
+// target) cannot consume unbounded resources.
 const maxConcurrentAnnouncePushes = 8
+
+// announcePushQueueCapacity bounds how many fills can wait for a free worker before
+// newAnnounceSink starts dropping (see announceQueueEnqueueGrace). Sized as a small multiple
+// of the worker pool so a burst queues rather than instantly drops.
+const announcePushQueueCapacity = maxConcurrentAnnouncePushes * 4
+
+// announceQueueEnqueueGrace is how long a fill waits for a free queue slot before it's
+// dropped. A slow target should cost latency, not delivery (#232) — but the sink runs on the
+// caller's (RSS poll) goroutine, so the wait is bounded rather than indefinite.
+const announceQueueEnqueueGrace = 2 * time.Second
+
+// announcePushTimeoutFor scales a batch's context with its release count: pushOne applies
+// announce.PerReleaseTimeout to each release in the batch, sequentially, so a fixed 60s
+// budget that worked for a small batch fails a large one's tail (#232). The floor covers a
+// typical small batch; the per-release allowance keeps pace with the worst case (every
+// release in the batch takes the full per-release timeout).
+func announcePushTimeoutFor(releases int) time.Duration {
+	d := announcePushTimeoutBase + time.Duration(releases)*announce.PerReleaseTimeout
+	if d > announcePushTimeoutMax {
+		return announcePushTimeoutMax
+	}
+	return d
+}
 
 // srcRelease is the minimal snapshot the announce sink lifts out of a cache write-back, so
 // the async push never holds (or races on) the cached release slice.
@@ -95,28 +123,29 @@ type srcRelease struct {
 
 // newAnnounceSink builds the cross-seed announce source: a registry.AnnounceSink that, on an
 // RSS/empty-query cache fill, asynchronously pushes the new releases to every enabled
-// announce target. The HTTP fan-out is detached (its own goroutine + a fresh, bounded
-// context), so a push never blocks or fails a search; only the cheap snapshot loop runs on
-// the caller's goroutine.
+// announce target. The HTTP fan-out runs on a fixed worker pool (its own goroutines + a
+// fresh, per-batch context sized off the release count), so a push never blocks or fails a
+// search; only the cheap snapshot + enqueue runs on the caller's goroutine. A fill queues
+// behind a slow pool rather than dropping immediately — it's dropped only if the queue
+// itself stays full past announceQueueEnqueueGrace (#232).
 func newAnnounceSink(svc *announce.Service, db dbinterface.Execer, keyring *secrets.Keyring, basePath, externalOrigin string, log zerolog.Logger) registry.AnnounceSink {
 	instances := database.Instances{}
-	sem := make(chan struct{}, maxConcurrentAnnouncePushes)
+	queue := make(chan func(), announcePushQueueCapacity)
+	for range maxConcurrentAnnouncePushes {
+		//nolint:gosec // G118: intentionally detached — workers must outlive any single triggering request.
+		go func() {
+			for job := range queue {
+				job()
+			}
+		}()
+	}
 	return func(_ context.Context, instanceID int64, fresh []*normalizer.Release) {
 		snap := make([]srcRelease, 0, len(fresh))
 		for _, r := range fresh {
 			snap = append(snap, srcRelease{name: r.Title, guid: torznab.GUIDFor(r), link: r.Link, magnet: r.Magnet, size: r.Size})
 		}
-		select {
-		case sem <- struct{}{}:
-		default:
-			log.Warn().Int64("instance_id", instanceID).Int("releases", len(snap)).
-				Msg("announce: push backpressure — too many in-flight pushes; dropping (next RSS poll re-derives)")
-			return
-		}
-		//nolint:gosec // G118: intentionally detached — the announce push must outlive the triggering search request.
-		go func() {
-			defer func() { <-sem }()
-			ctx, cancel := context.WithTimeout(context.Background(), announcePushTimeout)
+		job := func() {
+			ctx, cancel := context.WithTimeout(context.Background(), announcePushTimeoutFor(len(snap)))
 			defer cancel()
 			inst, err := instances.GetByID(ctx, db, instanceID)
 			if err != nil {
@@ -125,7 +154,7 @@ func newAnnounceSink(svc *announce.Service, db dbinterface.Execer, keyring *secr
 			}
 			// Every announce target today (qui cross-seed, cross-seed v6) is
 			// torrent-only — pushing usenet releases at them is pure waste and
-			// burns the in-flight push budget (#231).
+			// burns the push worker pool (#231).
 			if inst.Protocol != "torrent" {
 				log.Debug().Str("indexer", inst.Slug).Str("protocol", inst.Protocol).
 					Msg("announce: skipping push for non-torrent indexer")
@@ -134,7 +163,13 @@ func newAnnounceSink(svc *announce.Service, db dbinterface.Execer, keyring *secr
 			svc.Push(ctx, func(conn domain.AnnounceConnection) []announce.Release {
 				return announceReleasesFor(conn, svc, keyring, basePath, externalOrigin, inst.Slug, snap, log)
 			})
-		}()
+		}
+		select {
+		case queue <- job:
+		case <-time.After(announceQueueEnqueueGrace):
+			log.Warn().Int64("instance_id", instanceID).Int("releases", len(snap)).
+				Msg("announce: push backpressure — too many in-flight pushes; dropping (next RSS poll re-derives)")
+		}
 	}
 }
 
