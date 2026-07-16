@@ -23,6 +23,10 @@ permissions:
 
 env:
   GO_VERSION: 1.26.5
+  # A stalled cache-blob download (0 MB/s mid-transfer, seen from the self-hosted
+  # fleet) otherwise hangs for actions/cache's default 10-minute segment timeout
+  # before falling back to a miss. Give up after 2 and take the miss.
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
 
 # Cancel superseded runs on a PR branch; never cancel main-branch history.
 concurrency:
