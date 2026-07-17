@@ -295,14 +295,3 @@ func TestSearchTransportErrorRedactsAPIKey(t *testing.T) {
 		t.Error("transport error leaked API credentials")
 	}
 }
-
-func TestSearchResponseSizeCap(t *testing.T) {
-	t.Parallel()
-	driver := liveDriver(t, &scriptDoer{handler: func(*stdhttp.Request) (*stdhttp.Response, error) {
-		return response(stdhttp.StatusOK, strings.Repeat("x", maxBodyBytes+1)), nil
-	}})
-	_, err := driver.Search(context.Background(), search.Query{})
-	if !errors.Is(err, errResponseTooLarge) || !errors.Is(err, search.ErrParseError) {
-		t.Errorf("err = %v, want response-too-large parse error", err)
-	}
-}

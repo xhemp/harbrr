@@ -84,12 +84,12 @@ func (d *driver) parseReleases(body []byte) ([]*normalizer.Release, error) {
 		}
 		releases = append(releases, release)
 	}
-	native.TraceReleases(d.log, d.def.ID, releases)
+	native.TraceReleases(d.Log, d.Def.ID, releases)
 	return releases, nil
 }
 
 func (d *driver) apiError(message string) error {
-	message = d.scrubAPIKey(message)
+	message = d.Scrub(strings.TrimSpace(message))
 	if looksLikeAuthError(message) {
 		return fmt.Errorf("nebulance: API error: %s: %w", message, login.ErrLoginFailed)
 	}
@@ -115,7 +115,7 @@ func (d *driver) toRelease(row *apiRow) (*normalizer.Release, error) {
 	if title == "" {
 		title = strings.TrimSpace(row.GroupName)
 	}
-	details := d.baseURL + "torrents.php?id=" + strconv.FormatInt(row.TorrentID, 10)
+	details := d.BaseURL + "torrents.php?id=" + strconv.FormatInt(row.TorrentID, 10)
 	seedTime := int64(86400)
 	if strings.EqualFold(strings.TrimSpace(row.Category), "season") {
 		seedTime = 432000
@@ -143,7 +143,7 @@ func (d *driver) toRelease(row *apiRow) (*normalizer.Release, error) {
 
 func (d *driver) categories(title string) []int {
 	trackerCategory := qualityCategory(title)
-	for _, category := range d.caps.CategoryMap.MapTrackerCatToNewznab(trackerCategory) {
+	for _, category := range d.Caps.CategoryMap.MapTrackerCatToNewznab(trackerCategory) {
 		if category < customCategoryOffset {
 			return []int{category}
 		}
@@ -246,12 +246,4 @@ func isBareAuthError(body []byte) bool {
 
 func containsFold(body []byte, marker string) bool {
 	return strings.Contains(strings.ToLower(string(body)), marker)
-}
-
-// scrubAPIKey removes the configured API key from tracker-supplied error text.
-func (d *driver) scrubAPIKey(message string) string {
-	if d.apikey == "" {
-		return strings.TrimSpace(message)
-	}
-	return strings.ReplaceAll(strings.TrimSpace(message), d.apikey, "[redacted]")
 }

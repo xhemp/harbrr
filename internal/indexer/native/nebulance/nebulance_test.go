@@ -51,7 +51,7 @@ func TestTestRequiresAPIKeyBeforeRequest(t *testing.T) {
 		return nil, errors.New("unexpected request")
 	}}
 	driver := liveDriver(t, doer)
-	driver.apikey = ""
+	driver.Cfg["apikey"] = ""
 	if err := driver.Test(context.Background()); !errors.Is(err, errAPIKeyRequired) {
 		t.Errorf("Test err = %v, want errAPIKeyRequired", err)
 	}

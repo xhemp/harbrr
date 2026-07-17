@@ -2,9 +2,7 @@ package nebulance
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	stdhttp "net/http"
 	"net/url"
 	"strconv"
@@ -13,17 +11,11 @@ import (
 	"unicode/utf8"
 
 	apphttp "github.com/autobrr/harbrr/internal/http"
-	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 )
 
-const (
-	defaultLimit = 100
-	maxBodyBytes = 16 << 20
-)
-
-var errResponseTooLarge = errors.New("nebulance: search response exceeds the size cap")
+const defaultLimit = 100
 
 // Search sends a paged GET to NBL's JSON API and returns the requested Torznab
 // result window. An unaligned offset may require two upstream pages. Unsupported
@@ -43,29 +35,16 @@ func (d *driver) Search(ctx context.Context, q search.Query) ([]*normalizer.Rele
 }
 
 func (d *driver) searchPage(ctx context.Context, rawURL string) ([]*normalizer.Release, error) {
-	resp, err := d.get(ctx, rawURL)
+	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("nebulance: build request: %w", apphttp.RedactURLError(err))
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := d.Do(ctx, req, authClassify)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	switch {
-	case resp.StatusCode == stdhttp.StatusUnauthorized || resp.StatusCode == stdhttp.StatusForbidden:
-		return nil, fmt.Errorf("nebulance: search unauthorized in non-interactive mode; verify or replace the configured API key: %w", login.ErrLoginFailed)
-	case search.IsRateLimitStatus(resp.StatusCode):
-		return nil, &search.RateLimitedError{
-			StatusCode: resp.StatusCode,
-			RetryAfter: search.ParseRetryAfter(resp.Header.Get("Retry-After"), d.clock),
-		}
-	case resp.StatusCode < 200 || resp.StatusCode >= 300:
-		return nil, fmt.Errorf("nebulance: search returned HTTP %d", resp.StatusCode)
-	}
-
-	body, err := readSearchBody(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return d.parseReleases(body)
+	return d.parseReleases(resp.Body)
 }
 
 // completeOffsetPage removes the leading remainder from an upstream page and, when
@@ -106,7 +85,7 @@ func (d *driver) buildSearchURL(q search.Query) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	params.Set("api_key", d.apikey)
+	params.Set("api_key", d.Cfg["apikey"])
 	limit := q.Limit
 	if limit <= 0 {
 		limit = defaultLimit
@@ -117,7 +96,7 @@ func (d *driver) buildSearchURL(q search.Query) (string, bool) {
 			params.Set("page", strconv.Itoa(page))
 		}
 	}
-	return d.baseURL + "api.php?" + params.Encode(), true
+	return d.BaseURL + "api.php?" + params.Encode(), true
 }
 
 func searchParams(q search.Query) (url.Values, bool) {
@@ -210,30 +189,4 @@ func normalizeIMDBID(raw string) string {
 		return ""
 	}
 	return fmt.Sprintf("tt%07d", value)
-}
-
-func (d *driver) get(ctx context.Context, rawURL string) (*stdhttp.Response, error) {
-	req, err := stdhttp.NewRequestWithContext(ctx, stdhttp.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("nebulance: build request to %s: %w", apphttp.SchemeHost(rawURL), apphttp.RedactURLError(err))
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := d.doer.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("nebulance: request to %s: %w", apphttp.SchemeHost(rawURL), apphttp.RedactURLError(err))
-	}
-	return resp, nil
-}
-
-// readSearchBody reads at most the configured response cap plus one sentinel byte.
-// Read and overflow failures are classified as parse errors without exposing body data.
-func readSearchBody(r io.Reader) ([]byte, error) {
-	body, err := io.ReadAll(io.LimitReader(r, maxBodyBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("nebulance: read search response: %s: %w", apphttp.RedactError(err), search.ErrParseError)
-	}
-	if len(body) > maxBodyBytes {
-		return nil, fmt.Errorf("%w: %w", errResponseTooLarge, search.ErrParseError)
-	}
-	return body, nil
 }

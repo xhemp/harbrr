@@ -289,7 +289,7 @@ func (r *Manager) updateInTx(ctx context.Context, tx dbinterface.TxQuerier, inst
 	if err != nil {
 		return err
 	}
-	cfg, err := r.decryptConfig(inst.ID, merged)
+	cfg, err := decryptConfig(r.keyring, inst.ID, merged)
 	if err != nil {
 		return err
 	}
