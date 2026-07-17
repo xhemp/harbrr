@@ -183,9 +183,29 @@ func (s *Service) Push(ctx context.Context, build func(conn domain.AnnounceConne
 		if !conn.Enabled {
 			continue
 		}
-		matched += s.pushOne(ctx, conn, build(conn))
+		rels := build(conn)
+		// Per-connection budget: Push repeats delivery per connection, so a batch
+		// deadline scaled only by release count starves the SECOND connection's tail
+		// behind a slow first one. Each connection gets its own release-scaled budget;
+		// the caller's ctx stays the overall hard cap.
+		connCtx, cancel := context.WithTimeout(ctx, connPushBudget(len(rels)))
+		matched += s.pushOne(connCtx, conn, rels)
+		cancel()
 	}
 	return matched
+}
+
+// pushBudgetBase is the floor of one connection's push budget — enough for a
+// handful of releases against a live target even with PerReleaseTimeout applied
+// per release inside pushOne.
+const pushBudgetBase = 30 * time.Second
+
+// connPushBudget scales one connection's push deadline with its release count:
+// pushOne announces sequentially at up to PerReleaseTimeout each, so a fixed
+// budget that fits a small batch fails a large one's tail. The caller's context
+// carries the overall hard cap, so no cap is applied here.
+func connPushBudget(releases int) time.Duration {
+	return pushBudgetBase + time.Duration(releases)*PerReleaseTimeout
 }
 
 // PerReleaseTimeout bounds a single release's announce POST. A batch shares one caller-

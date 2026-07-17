@@ -77,13 +77,10 @@ func apiKeyValidator(authSvc *auth.Service) func(string) bool {
 	}
 }
 
-// announcePushTimeoutBase is the floor for a detached announce-push batch's context — enough
-// for a handful of releases against a live target even with the per-release deadline
-// (announce.PerReleaseTimeout) applied inside the batch.
-const announcePushTimeoutBase = 30 * time.Second
-
-// announcePushTimeoutMax caps the scaled batch timeout so one huge fill can't hold a worker
-// (and its queue slot) forever.
+// announcePushTimeoutMax is the flat hard cap on one fill's whole push fan-out, so a
+// huge fill against slow targets can't hold a worker (and its queue slot) forever. The
+// announce Service scales each CONNECTION's budget by its release count internally
+// (connPushBudget) — this outer deadline only backstops the total.
 const announcePushTimeoutMax = 10 * time.Minute
 
 // maxConcurrentAnnouncePushes sizes the fixed worker pool that processes queued announce
@@ -100,19 +97,6 @@ const announcePushQueueCapacity = maxConcurrentAnnouncePushes * 4
 // dropped. A slow target should cost latency, not delivery (#232) — but the sink runs on the
 // caller's (RSS poll) goroutine, so the wait is bounded rather than indefinite.
 const announceQueueEnqueueGrace = 2 * time.Second
-
-// announcePushTimeoutFor scales a batch's context with its release count: pushOne applies
-// announce.PerReleaseTimeout to each release in the batch, sequentially, so a fixed 60s
-// budget that worked for a small batch fails a large one's tail (#232). The floor covers a
-// typical small batch; the per-release allowance keeps pace with the worst case (every
-// release in the batch takes the full per-release timeout).
-func announcePushTimeoutFor(releases int) time.Duration {
-	d := announcePushTimeoutBase + time.Duration(releases)*announce.PerReleaseTimeout
-	if d > announcePushTimeoutMax {
-		return announcePushTimeoutMax
-	}
-	return d
-}
 
 // srcRelease is the minimal snapshot the announce sink lifts out of a cache write-back, so
 // the async push never holds (or races on) the cached release slice.
@@ -145,7 +129,7 @@ func newAnnounceSink(svc *announce.Service, db dbinterface.Execer, keyring *secr
 			snap = append(snap, srcRelease{name: r.Title, guid: torznab.GUIDFor(r), link: r.Link, magnet: r.Magnet, size: r.Size})
 		}
 		job := func() {
-			ctx, cancel := context.WithTimeout(context.Background(), announcePushTimeoutFor(len(snap)))
+			ctx, cancel := context.WithTimeout(context.Background(), announcePushTimeoutMax)
 			defer cancel()
 			inst, err := instances.GetByID(ctx, db, instanceID)
 			if err != nil {

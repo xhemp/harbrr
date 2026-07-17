@@ -120,28 +120,6 @@ func TestAnnounceSinkSkipsUsenet(t *testing.T) {
 	}
 }
 
-// TestAnnouncePushTimeoutFor pins #232: the batch context scales with the release count
-// (pushOne applies announce.PerReleaseTimeout to each, sequentially) instead of staying a
-// fixed 60s regardless of batch size, and is capped so one huge fill can't hold a worker
-// forever.
-func TestAnnouncePushTimeoutFor(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		releases int
-		want     time.Duration
-	}{
-		{0, announcePushTimeoutBase},
-		{1, announcePushTimeoutBase + announce.PerReleaseTimeout},
-		{94, announcePushTimeoutMax},     // 30s + 94*10s = 970s, above the 10m cap
-		{10_000, announcePushTimeoutMax}, // scaled value would blow past the cap
-	}
-	for _, tt := range tests {
-		if got := announcePushTimeoutFor(tt.releases); got != tt.want {
-			t.Errorf("announcePushTimeoutFor(%d) = %v, want %v", tt.releases, got, tt.want)
-		}
-	}
-}
-
 // slowTarget simulates a live-but-slow announce target: each call sleeps before counting, so
 // a big batch takes real (bounded) wall-clock time to push.
 type slowTarget struct {
