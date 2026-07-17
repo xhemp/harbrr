@@ -11,20 +11,87 @@ import (
 // existing paced client enforces it (no special-casing). Prowlarr itself uses a flat
 // 3s for both — these are more permissive but stay within autobrr's measured limits.
 const (
-	redactedDelaySeconds = 1.0
-	orpheusDelaySeconds  = 2.0
+	redactedDelaySeconds   = 1.0
+	orpheusDelaySeconds    = 2.0
+	alphaRatioDelaySeconds = 3.0
 )
 
-// Families returns the two Gazelle-family sites (Redacted, Orpheus) as native
-// families. Each carries a Go-built, caps-only definition (id/name/type/links/
-// settings/caps) and the shared New factory; the per-site behaviour (RED's bare
-// Authorization header vs OPS's "token " prefix and never-usetoken=0 quirk) is keyed
-// off the definition id inside the driver. They are registered with the registry, not
-// the Cardigann loader.
+// Families returns the Gazelle-family sites as native families. Each carries a
+// Go-built, caps-only definition and the shared New factory; per-site auth and parsing
+// behavior is keyed by definition id inside the driver.
 func Families() []native.Family {
 	return []native.Family{
 		{Definition: siteDef("redacted", "Redacted", "https://redacted.sh/", redactedDelaySeconds), Factory: New},
 		{Definition: siteDef("orpheus", "Orpheus", "https://orpheus.network/", orpheusDelaySeconds), Factory: New},
+		{Definition: alphaRatioDef(), Factory: New},
+	}
+}
+
+func alphaRatioDef() *loader.Definition {
+	delay := alphaRatioDelaySeconds
+	return &loader.Definition{
+		ID:           "alpharatio",
+		Name:         "AlphaRatio",
+		Description:  "AlphaRatio (native Gazelle-family driver)",
+		Language:     "en-US",
+		Type:         "private",
+		Encoding:     "UTF-8",
+		Links:        []string{"https://alpharatio.cc/"},
+		RequestDelay: &delay,
+		Settings:     alphaRatioSettings(),
+		Caps:         alphaRatioCaps(),
+	}
+}
+
+func alphaRatioSettings() []loader.SettingsField {
+	return []loader.SettingsField{
+		{Name: "username", Label: "Username", Type: "text", Required: true},
+		{Name: "password", Label: "Password", Type: "password", Required: true},
+		{Name: "use_freeleech_token", Label: "Use freeleech token", Type: "checkbox"},
+		{Name: "freeleech_only", Label: "Only freeleech", Type: "checkbox"},
+		{Name: "exclude_scene", Label: "Exclude scene releases", Type: "checkbox"},
+	}
+}
+
+func alphaRatioCaps() loader.Caps {
+	return loader.Caps{
+		CategoryMappings: []loader.CategoryMapping{
+			cat("1", "TV/SD", "TvSD"),
+			cat("2", "TV/HD", "TvHD"),
+			cat("3", "TV/UHD", "TvUHD"),
+			cat("4", "TV/SD", "TvDVDRip"),
+			cat("5", "TV/SD", "TvPackSD"),
+			cat("6", "TV/HD", "TvPackHD"),
+			cat("7", "TV/UHD", "TvPackUHD"),
+			cat("8", "Movies/SD", "MovieSD"),
+			cat("9", "Movies/HD", "MovieHD"),
+			cat("10", "Movies/UHD", "MovieUHD"),
+			cat("11", "Movies/SD", "MoviePackSD"),
+			cat("12", "Movies/HD", "MoviePackHD"),
+			cat("13", "Movies/UHD", "MoviePackUHD"),
+			cat("14", "XXX", "MovieXXX"),
+			cat("15", "Movies/BluRay", "Bluray"),
+			cat("16", "TV/Anime", "AnimeSD"),
+			cat("17", "TV/Anime", "AnimeHD"),
+			cat("18", "PC/Games", "GamesPC"),
+			cat("19", "Console/XBox", "GamesxBox"),
+			cat("20", "Console/PS4", "GamesPS"),
+			cat("21", "Console/Wii", "GamesNin"),
+			cat("22", "PC/0day", "AppsWindows"),
+			cat("23", "PC/Mac", "AppsMAC"),
+			cat("24", "PC/0day", "AppsLinux"),
+			cat("25", "PC/Mobile-Other", "AppsMobile"),
+			cat("26", "XXX", "0dayXXX"),
+			cat("27", "Books", "eBook"),
+			cat("28", "Audio/Audiobook", "AudioBook"),
+			cat("29", "Audio/Other", "Music"),
+			cat("30", "Other", "Misc"),
+		},
+		Modes: loader.Modes{
+			Search:      []string{"q"},
+			MovieSearch: []string{"q", "imdbid"},
+			TVSearch:    []string{"q", "season", "ep"},
+		},
 	}
 }
 

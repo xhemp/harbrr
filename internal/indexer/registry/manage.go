@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/autobrr/harbrr/internal/database"
@@ -137,6 +138,9 @@ func (r *Manager) Add(ctx context.Context, p AddParams) (domain.IndexerInstance,
 	def, _, err := resolveDefinition(r.native, r.loader, p.DefinitionID)
 	if err != nil {
 		return domain.IndexerInstance{}, fmt.Errorf("%w: unknown definition %q", ErrInvalid, p.DefinitionID)
+	}
+	if err := validateRequiredSettings(def.Settings, p.Settings); err != nil {
+		return domain.IndexerInstance{}, err
 	}
 	if err := r.ensureSlugFree(ctx, slug); err != nil {
 		return domain.IndexerInstance{}, err
@@ -280,6 +284,9 @@ func (r *Manager) updateInTx(ctx context.Context, tx dbinterface.TxQuerier, inst
 	if err != nil {
 		return err
 	}
+	if err := r.validateMergedRequiredSettings(inst.ID, def.Settings, existing, p.Settings); err != nil {
+		return err
+	}
 	merged, err := r.mergeSettings(inst.ID, settingFields(def), existing, p.Settings)
 	if err != nil {
 		return err
@@ -390,6 +397,52 @@ func (r *Manager) mergeSettings(id int64, fields map[string]loader.SettingsField
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// validateMergedRequiredSettings validates the effective post-update values. A
+// redacted secret keeps its stored plaintext; omitted settings keep their stored
+// value. Definitions without required settings avoid the decryption work entirely.
+func (r *Manager) validateMergedRequiredSettings(id int64, fields []loader.SettingsField, existing []domain.IndexerSetting, incoming map[string]string) error {
+	if !hasRequiredSettings(fields) {
+		return nil
+	}
+	effective, err := decryptConfig(r.keyring, id, existing)
+	if err != nil {
+		return fmt.Errorf("registry: validate required settings: %w", err)
+	}
+	for name, value := range incoming {
+		if secrets.IsRedacted(value) {
+			continue
+		}
+		effective[name] = value
+	}
+	return validateRequiredSettings(fields, effective)
+}
+
+// hasRequiredSettings reports whether any field is required, a cheap guard so the
+// common no-required-settings definition skips the decryption above.
+func hasRequiredSettings(fields []loader.SettingsField) bool {
+	for _, field := range fields {
+		if field.Required {
+			return true
+		}
+	}
+	return false
+}
+
+// validateRequiredSettings rejects absent, blank, or redacted-placeholder values
+// before persistence. Errors name the missing field but never include its value.
+func validateRequiredSettings(fields []loader.SettingsField, settings map[string]string) error {
+	for _, field := range fields {
+		if !field.Required {
+			continue
+		}
+		value, ok := settings[field.Name]
+		if !ok || strings.TrimSpace(value) == "" || secrets.IsRedacted(value) {
+			return fmt.Errorf("%w: setting %q is required", ErrInvalid, field.Name)
+		}
+	}
+	return nil
 }
 
 // inTx runs fn inside a transaction, committing on success and rolling back on

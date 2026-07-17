@@ -2,6 +2,7 @@ package torznabhttp
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -495,6 +496,28 @@ func TestServeDL_InvalidToken(t *testing.T) {
 	assertNoDLLeak(t, rec)
 	if idx.gotGrabLink != "" {
 		t.Errorf("Grab must not run for an invalid token, got %q", idx.gotGrabLink)
+	}
+}
+
+// TestServeDL_PlaintextModeRejectsForgedHost proves plaintext credential storage does
+// not let a feed API-key holder forge an arbitrary URL and pass it to a driver that
+// attaches tracker cookies or authorization headers.
+func TestServeDL_PlaintextModeRejectsForgedHost(t *testing.T) {
+	t.Parallel()
+
+	idx := resolverDemoIndexer(t)
+	idx.downloadNeedsAuth = true
+	kr := plaintextKeyringForTest(t)
+	h := NewHandler(fakeProvider{"demo": idx}, WithAPIKey(testAPIKey), WithDLToken(kr))
+	attackerURL := "http://127.0.0.1/private"
+	forged := base64.RawURLEncoding.EncodeToString([]byte(attackerURL))
+	rec := doDL(t, h, "demo", "token="+url.QueryEscape(forged))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for forged plaintext-mode token", rec.Code)
+	}
+	assertNoDLLeak(t, rec)
+	if idx.gotGrabLink != "" {
+		t.Errorf("Grab received forged URL %q", idx.gotGrabLink)
 	}
 }
 

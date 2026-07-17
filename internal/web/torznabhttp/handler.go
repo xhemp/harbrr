@@ -234,6 +234,10 @@ func ServeGrab(w http.ResponseWriter, r *http.Request, idx core.Indexer, dlToken
 		errw(w, http.StatusBadRequest, "invalid download token")
 		return
 	}
+	// The decoded link is trusted because tokens are always AEAD-authenticated and
+	// bound to this indexer, including when credential storage runs in plaintext mode.
+	// An apikey-holder therefore cannot forge an attacker-host link that makes Grab
+	// disclose the indexer's cookie/header credentials or act as an SSRF primitive.
 	result, err := idx.Grab(r.Context(), link)
 	if err != nil {
 		logInternalError(log, "grab", idx.Info().ID, err)

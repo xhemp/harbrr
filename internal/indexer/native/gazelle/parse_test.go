@@ -45,7 +45,7 @@ func TestParseBrowseMusicGolden(t *testing.T) {
 	t.Parallel()
 	body := readFixture(t, "testdata/browse_music.json")
 	d := parseDriver(t, "redacted", map[string]string{"apikey": credAPIKey})
-	got, err := d.parseBrowse(body)
+	got, err := d.parseBrowse(body, "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestParseBrowseSortsByPublishDateDesc(t *testing.T) {
 	t.Parallel()
 	body := readFixture(t, "testdata/browse_music.json")
 	d := parseDriver(t, "redacted", map[string]string{"apikey": credAPIKey})
-	got, err := d.parseBrowse(body)
+	got, err := d.parseBrowse(body, "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestComposeTitleSkipsWhitespaceFields(t *testing.T) {
 func TestParseBrowseNonMusic(t *testing.T) {
 	t.Parallel()
 	body := readFixture(t, "testdata/browse_nonmusic.json")
-	got, err := parseDriver(t, "orpheus", nil).parseBrowse(body)
+	got, err := parseDriver(t, "orpheus", nil).parseBrowse(body, "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestParseBrowseFreeleechRED(t *testing.T) {
 	t.Parallel()
 	body := readFixture(t, "testdata/browse_freeleech.json")
 	d := parseDriver(t, "redacted", map[string]string{"apikey": credAPIKey, "use_freeleech_token": "true"})
-	got, err := d.parseBrowse(body)
+	got, err := d.parseBrowse(body, "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestParseBrowseFreeleechRED(t *testing.T) {
 func TestParseBrowseFreeloadOPS(t *testing.T) {
 	t.Parallel()
 	body := readFixture(t, "testdata/browse_freeleech.json")
-	got, err := parseDriver(t, "orpheus", nil).parseBrowse(body)
+	got, err := parseDriver(t, "orpheus", nil).parseBrowse(body, "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -257,12 +257,12 @@ func TestParseBrowseFailure(t *testing.T) {
 	d := parseDriver(t, "redacted", map[string]string{"apikey": credAPIKey})
 
 	body := readFixture(t, "testdata/failure.json")
-	if _, err := d.parseBrowse(body); !errors.Is(err, search.ErrParseError) {
+	if _, err := d.parseBrowse(body, ""); !errors.Is(err, search.ErrParseError) {
 		t.Errorf("non-auth failure: err = %v, want search.ErrParseError", err)
 	}
 
 	auth := []byte(`{"status":"failure","error":"bad credentials"}`)
-	if _, err := d.parseBrowse(auth); !errors.Is(err, login.ErrLoginFailed) {
+	if _, err := d.parseBrowse(auth, ""); !errors.Is(err, login.ErrLoginFailed) {
 		t.Errorf("auth failure: err = %v, want login.ErrLoginFailed", err)
 	}
 }
@@ -273,7 +273,7 @@ func TestParseBrowseFailure(t *testing.T) {
 func TestParseBrowseMalformed(t *testing.T) {
 	t.Parallel()
 	d := parseDriver(t, "redacted", nil)
-	_, err := d.parseBrowse([]byte("<html>not json</html>"))
+	_, err := d.parseBrowse([]byte("<html>not json</html>"), "")
 	if !errors.Is(err, search.ErrParseError) {
 		t.Errorf("err = %v, want search.ErrParseError", err)
 	}
@@ -287,7 +287,7 @@ func TestParseBrowseMalformed(t *testing.T) {
 func TestParseBrowseSuccessEmpty(t *testing.T) {
 	t.Parallel()
 	d := parseDriver(t, "redacted", nil)
-	got, err := d.parseBrowse([]byte(`{"status":"success"}`))
+	got, err := d.parseBrowse([]byte(`{"status":"success"}`), "")
 	if err != nil {
 		t.Fatalf("parseBrowse: %v", err)
 	}
@@ -302,12 +302,62 @@ func TestParseErrorScrubsAPIKey(t *testing.T) {
 	t.Parallel()
 	d := parseDriver(t, "redacted", map[string]string{"apikey": credAPIKey})
 	body := []byte(`{"status":"failure","error":"rejected key ` + credAPIKey + ` boom"}`)
-	_, err := d.parseBrowse(body)
+	_, err := d.parseBrowse(body, "")
 	if err == nil {
 		t.Fatal("want a parse error")
 	}
 	if strings.Contains(err.Error(), credAPIKey) {
 		t.Errorf("error leaks the apikey: %v", err)
+	}
+}
+
+// TestScrubCredentialsCookies proves configured, request, and current session cookies
+// are scrubbed in both serialized and bare-value forms without changing unrelated text.
+func TestScrubCredentialsCookies(t *testing.T) {
+	t.Parallel()
+	const (
+		configuredValue = "SYNTHETICCONFIGUREDCOOKIE"
+		requestValue    = "SYNTHETICREQUESTCOOKIE"
+		currentValue    = "SYNTHETICCURRENTCOOKIE"
+	)
+	configuredCookie := "session=" + configuredValue
+	requestCookie := "session=" + requestValue
+	currentCookie := "session=" + currentValue
+	d := parseDriver(t, "alpharatio", map[string]string{"cookie": configuredCookie})
+	d.session = sessionState{cookie: currentCookie, generation: 3}
+
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "bare values",
+			input: "configured " + configuredValue + " request " + requestValue + " current " + currentValue,
+			want:  "configured [redacted] request [redacted] current [redacted]",
+		},
+		{
+			name:  "serialized cookies",
+			input: configuredCookie + " " + requestCookie + " " + currentCookie,
+			want:  "[redacted] [redacted] [redacted]",
+		},
+		{
+			name:  "cookie headers",
+			input: "Cookie: " + requestCookie + "\nSet-Cookie: " + currentCookie + "; Path=/",
+			want:  "Cookie: [redacted]\nSet-Cookie: [redacted]; Path=/",
+		},
+		{
+			name:  "unrelated text",
+			input: "tracker temporarily unavailable",
+			want:  "tracker temporarily unavailable",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := d.scrubCredentials(tc.input, requestCookie); got != tc.want {
+				t.Errorf("scrubCredentials() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

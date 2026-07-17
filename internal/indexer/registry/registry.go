@@ -331,7 +331,7 @@ func (r *Resolver) buildAdapter(ctx context.Context, slug string) (*indexerAdapt
 	if err != nil {
 		return nil, fmt.Errorf("registry: load settings for %q: %w", slug, err)
 	}
-	cfg, err := r.decryptConfig(inst.ID, settings)
+	cfg, err := decryptConfig(r.keyring, inst.ID, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -521,16 +521,18 @@ func baseURLOf(inst domain.IndexerInstance, def *loader.Definition) string {
 	return ""
 }
 
-// decryptConfig turns stored settings into the engine's .Config map, decrypting
-// each secret with the row-bound AAD.
-func (r *Resolver) decryptConfig(instanceID int64, settings []domain.IndexerSetting) (map[string]string, error) {
+// decryptConfig turns stored settings into the engine's .Config map, decrypting each
+// secret with the row-bound AAD. A free function (like encodeSetting) so both the serve
+// path (Resolver.buildAdapter) and the CRUD validation path (Manager) share it through
+// their keyring without either type owning it.
+func decryptConfig(kr secretsKeyring, instanceID int64, settings []domain.IndexerSetting) (map[string]string, error) {
 	cfg := make(map[string]string, len(settings))
 	for _, s := range settings {
 		if !s.IsSecret {
 			cfg[s.Name] = s.Value
 			continue
 		}
-		pt, err := r.keyring.Decrypt(instanceID, s.Name, s.ValueEncrypted)
+		pt, err := kr.Decrypt(instanceID, s.Name, s.ValueEncrypted)
 		if err != nil {
 			return nil, fmt.Errorf("registry: decrypt setting %q: %w", s.Name, err)
 		}

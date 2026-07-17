@@ -7,13 +7,7 @@ import (
 	"github.com/autobrr/harbrr/internal/secrets"
 )
 
-// dlTokenInstance is the fixed AEAD instance id for /dl tokens. The per-indexer
-// binding lives in the setting string (dlTokenSetting), so a token minted for one
-// indexer cannot be replayed against another: decoding under a different indexer id
-// is an AAD mismatch and fails.
-const dlTokenInstance = 0
-
-func dlTokenSetting(indexerID string) string {
+func dlTokenPurpose(indexerID string) string {
 	return "dl-proxy:" + indexerID
 }
 
@@ -21,17 +15,15 @@ func dlTokenSetting(indexerID string) string {
 // token bound to indexerID, for the grab-time /dl proxy. The link may carry a
 // passkey, so it must never reach the served feed in the clear:
 //
-//   - with an encryption key configured the token is AEAD ciphertext (the link is
-//     unrecoverable without the key);
-//   - in plaintext mode (no key — only under harbrr's loud startup warning) it
-//     degrades to base64url(link): obscured from logs and URL secret-scanners but
-//     recoverable, consistent with the plaintext-at-rest threat model that mode
-//     already accepts.
+// The token is always AEAD ciphertext, including when credential storage explicitly
+// runs in plaintext mode. Plaintext mode uses a process-local transient token key, so
+// its tokens expire across restarts instead of becoming forgeable. The AEAD purpose
+// binds the token to indexerID, preventing cross-indexer replay.
 //
 // The result is base64url so it drops straight into a query parameter without
 // escaping.
 func encodeDLToken(kr *secrets.Keyring, indexerID, link string) (string, error) {
-	blob, err := kr.Encrypt(dlTokenInstance, dlTokenSetting(indexerID), link)
+	blob, err := kr.SealToken(dlTokenPurpose(indexerID), link)
 	if err != nil {
 		return "", fmt.Errorf("dl token: encrypt: %w", err)
 	}
@@ -46,7 +38,7 @@ func decodeDLToken(kr *secrets.Keyring, indexerID, token string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("dl token: decode: %w", err)
 	}
-	link, err := kr.Decrypt(dlTokenInstance, dlTokenSetting(indexerID), string(raw))
+	link, err := kr.OpenToken(dlTokenPurpose(indexerID), string(raw))
 	if err != nil {
 		return "", fmt.Errorf("dl token: decrypt: %w", err)
 	}

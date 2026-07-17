@@ -2,8 +2,10 @@ package gazelle
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/login"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
 	"github.com/autobrr/harbrr/internal/indexer/native"
 )
@@ -13,11 +15,10 @@ import (
 // fallback, matching Prowlarr's link.Query.Contains("usetoken=1") guard).
 const usetokenParam = "&usetoken=1"
 
-// Grab fetches the header-authenticated download URL server-side and returns the
-// .torrent bytes. The link itself carries no secret (the API key rides in the
-// Authorization header, added by newRequest); the served feed therefore exposes the
-// link and routes the fetch through the /dl proxy, which is what this server-side Grab
-// drives.
+// Grab fetches the authenticated download URL server-side and returns the .torrent
+// bytes. The link itself carries no secret (fetchTorrent adds the API-key header or
+// session cookie); the served feed therefore exposes the link and routes the fetch
+// through the /dl proxy, which is what this server-side Grab drives.
 //
 // Freeleech-token fallback (Prowlarr's Redacted/Orpheus Download override): when the
 // freeleech-token setting is on and the link requested a token (usetoken=1) but the
@@ -39,12 +40,15 @@ func (d *driver) Grab(ctx context.Context, link string) (*search.GrabResult, err
 	return &search.GrabResult{Body: body, ContentType: contentType}, nil
 }
 
-// fetchTorrent GETs one download URL and returns its body and Content-Type. Status
-// classification (401/403 -> login.ErrLoginFailed, rate-limit -> RateLimitedError),
-// the torrent size cap (native.ErrDownloadTooLarge rather than a silent truncation),
-// and host-only transport redaction all live in the base DoDownload, so a grab error
-// surfaces at most the endpoint's host and never the download link or a credential.
+// fetchTorrent fetches one download URL server-side. RED/OPS hand the request to the base
+// DoDownload with the ClassifyAuth403 dialect; the base owns the torrent size cap
+// (native.ErrDownloadTooLarge rather than a silent truncation), status classification,
+// and host-only redaction. AlphaRatio routes through the cookie-session path so an
+// expired session renews once and retries.
 func (d *driver) fetchTorrent(ctx context.Context, link string) ([]byte, string, error) {
+	if d.profile.cookieAuth {
+		return d.fetchTorrentAttempt(ctx, link, true)
+	}
 	req, err := d.newRequest(ctx, link)
 	if err != nil {
 		return nil, "", err
@@ -54,6 +58,37 @@ func (d *driver) fetchTorrent(ctx context.Context, link string) ([]byte, string,
 		return nil, "", err
 	}
 	return resp.Body, resp.Header.Get("Content-Type"), nil
+}
+
+// fetchTorrentAttempt fetches one AlphaRatio download through the base transport under the
+// cookie-session dialect. A classified auth failure (redirect/401/403) renews the session
+// once and retries; a rate-limit, size-cap, or other transport error propagates as-is
+// (already redacted and sentinel-bearing from the base).
+func (d *driver) fetchTorrentAttempt(ctx context.Context, link string, allowRenew bool) ([]byte, string, error) {
+	if err := d.ensureSession(ctx); err != nil {
+		return nil, "", err
+	}
+	session := d.sessionSnapshot()
+	req, err := d.newCookieRequest(ctx, link, session.cookie)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := d.DoDownload(d.requestContext(ctx), req, classifyARCookie)
+	if err == nil {
+		return resp.Body, resp.Header.Get("Content-Type"), nil
+	}
+	// Only a classified auth failure (redirect/401/403) is renewable; a rate-limit,
+	// size-cap, or other transport error propagates as-is.
+	if !errors.Is(err, login.ErrLoginFailed) {
+		return nil, "", err
+	}
+	if !allowRenew {
+		return nil, "", alphaRatioSessionRejected("download")
+	}
+	if rerr := d.renewSession(ctx, session.generation); rerr != nil {
+		return nil, "", rerr
+	}
+	return d.fetchTorrentAttempt(ctx, link, false)
 }
 
 // isTokenRequest reports whether a download link requested a freeleech token, mirroring

@@ -161,6 +161,7 @@ type SettingsField struct {
 	Name     string            `yaml:"name"`
 	Label    string            `yaml:"label,omitempty"`
 	Type     string            `yaml:"type"`
+	Required bool              `yaml:"required,omitempty"`
 	Default  *Scalar           `yaml:"default,omitempty"`
 	Options  map[string]string `yaml:"options,omitempty"`
 	Defaults []string          `yaml:"defaults,omitempty"`

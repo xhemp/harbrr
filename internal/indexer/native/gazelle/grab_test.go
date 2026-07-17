@@ -31,6 +31,8 @@ func (s *seqDoer) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
 		method:        req.Method,
 		url:           req.URL.String(),
 		authorization: req.Header.Get("Authorization"),
+		cookie:        req.Header.Get("Cookie"),
+		userAgent:     req.Header.Get("User-Agent"),
 		accept:        req.Header.Get("Accept"),
 	})
 	resp := s.resps[len(s.reqs)-1]

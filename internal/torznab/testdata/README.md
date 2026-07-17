@@ -141,10 +141,10 @@ and the shared disposition rule.
   + fetching happens once, at grab time, when *arr GETs `/dl`. The `torznab.Indexer`
   contract swaps `ResolveDownload` for `Grab` (resolve + fetch the torrent through
   the session, honouring `download.method`/`headers`; a magnet 302s). The passkey
-  never appears in the feed, a log, an error, or a redirect Location. In plaintext
-  mode the token degrades to base64url(link) under the loud startup warning; the
-  forgeable-token SSRF is a known, gated limitation (apikey-required, encrypted by
-  default, single-user self-hosted — no host filter so a LAN tracker still works).
+  never appears in the feed, a log, an error, or a redirect Location. Tokens remain
+  AEAD-authenticated when credential storage uses plaintext mode: a process-local
+  transient token key prevents API-key holders from forging cross-indexer or
+  attacker-host grabs, and intentionally invalidates outstanding tokens on restart.
   Tests: `handler_test.go` (`TestServeDL_*`, `TestHandlerProxiesResolverLinks`,
   `TestHandlerProxyGUIDStable`), `dltoken_test.go`. **`[Resolved]`**
 

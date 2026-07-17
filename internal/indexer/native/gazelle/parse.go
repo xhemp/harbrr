@@ -23,7 +23,8 @@ import (
 const customCatCutoff = 100000
 
 // defaultCatID is the tracker category id used when a result's Category is null or
-// "Select Category" — Prowlarr's MapTrackerCatToNewznab("1") (=Audio) default.
+// "Select Category" — Prowlarr's MapTrackerCatToNewznab("1") default. What "1" maps
+// to depends on the site's category table (Audio for RED/OPS, TvSD for AlphaRatio).
 const defaultCatID = "1"
 
 // statusSuccess is the only response status that yields releases; any other status
@@ -60,6 +61,7 @@ type group struct {
 
 	TorrentID flexInt `json:"torrentId"`
 	Size      flexInt `json:"size"`
+	FileCount flexInt `json:"fileCount"`
 	Seeders   flexInt `json:"seeders"`
 	Leechers  flexInt `json:"leechers"`
 	Snatches  flexInt `json:"snatches"`
@@ -137,16 +139,19 @@ func (n flexInt) int64() int64 { return int64(n) }
 // parseBrowse decodes a browse body into normalized releases. A non-JSON or malformed
 // body is a parse error. A non-"success" status is NOT an empty-page condition here: it
 // is classified as a login failure when the error text looks like an auth rejection,
-// otherwise a parse error (apikey scrubbed from any surfaced message). On success it
-// flattens each group (music: one release per torrent; non-music: the group itself) and
-// sorts by PublishDate descending (mirroring Prowlarr's OrderByDescending(PublishDate)).
-func (d *driver) parseBrowse(body []byte) ([]*normalizer.Release, error) {
+// otherwise a parse error (credentials and session values scrubbed from any surfaced
+// message). On success it flattens each group (music: one release per torrent; non-music:
+// the group itself) and sorts by PublishDate descending (mirroring Prowlarr's
+// OrderByDescending(PublishDate)).
+// requestCookie is the exact session snapshot used to fetch body, which may differ from
+// both the configured and current sessions when a concurrent renewal completes.
+func (d *driver) parseBrowse(body []byte, requestCookie string) ([]*normalizer.Release, error) {
 	var resp browseResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("gazelle: decode browse response: %s: %w", apphttp.DecodeErrorDetail(err, body), search.ErrParseError)
 	}
 	if resp.Status != statusSuccess {
-		return nil, d.classifyStatusError(resp.Status, resp.Error)
+		return nil, d.classifyStatusError(resp.Status, resp.Error, requestCookie)
 	}
 	if resp.Response == nil {
 		return nil, nil
@@ -164,9 +169,10 @@ func (d *driver) parseBrowse(body []byte) ([]*normalizer.Release, error) {
 // classifyStatusError maps a non-success status to a login or parse failure. Gazelle
 // returns status:"failure" with an error message; a credentials/authorization phrase
 // maps to login.ErrLoginFailed, anything else to search.ErrParseError. The message is
-// scrubbed of the configured apikey before it reaches the error string.
-func (d *driver) classifyStatusError(status, msg string) error {
-	scrubbed := d.Scrub(msg)
+// scrubbed of configured credentials plus configured, request, and current sessions
+// before it reaches the error string.
+func (d *driver) classifyStatusError(status, msg, requestCookie string) error {
+	scrubbed := d.scrubCredentials(msg, requestCookie)
 	if looksLikeAuthFailure(scrubbed) {
 		return fmt.Errorf("gazelle: browse status %q: %s: %w", status, scrubbed, login.ErrLoginFailed)
 	}
@@ -205,7 +211,7 @@ func (d *driver) flattenGroup(g *group) []*normalizer.Release {
 // group) Category, defaulting to Audio.
 func (d *driver) musicRelease(g *group, t *torrent) *normalizer.Release {
 	free := d.musicFreeleech(t)
-	return &normalizer.Release{
+	release := &normalizer.Release{
 		Title:                composeTitle(g, t),
 		Link:                 d.downloadLink(t.TorrentID.int64(), d.wantToken(t.CanUseToken, free)),
 		Artist:               g.Artist,
@@ -222,6 +228,8 @@ func (d *driver) musicRelease(g *group, t *torrent) *normalizer.Release {
 		DownloadVolumeFactor: volumeFactor(free),
 		UploadVolumeFactor:   d.uploadVolumeFactor(t.IsNeutralLeech, t.IsFreeload),
 	}
+	d.applyProfile(release, g.GroupID.int64(), t.TorrentID.int64(), g.Tags)
+	return release
 }
 
 // nonMusicRelease maps a NON-MUSIC group to a single release: Title=GroupName, the
@@ -229,7 +237,7 @@ func (d *driver) musicRelease(g *group, t *torrent) *normalizer.Release {
 // to Audio.
 func (d *driver) nonMusicRelease(g *group) *normalizer.Release {
 	free := d.groupFreeleech(g)
-	return &normalizer.Release{
+	release := &normalizer.Release{
 		Title:                html.UnescapeString(g.GroupName),
 		Link:                 d.downloadLink(g.TorrentID.int64(), d.wantToken(g.CanUseToken, free)),
 		Year:                 g.GroupYear.int64(),
@@ -243,6 +251,11 @@ func (d *driver) nonMusicRelease(g *group) *normalizer.Release {
 		DownloadVolumeFactor: volumeFactor(free),
 		UploadVolumeFactor:   d.uploadVolumeFactor(g.IsNeutralLeech, g.IsFreeload),
 	}
+	if d.profile.site == "alpharatio" {
+		release.Files = g.FileCount.int64()
+	}
+	d.applyProfile(release, g.GroupID.int64(), g.TorrentID.int64(), g.Tags)
+	return release
 }
 
 // composeTitle builds the Gazelle music title EXACTLY per Prowlarr's RED/OPS GetTitle:
@@ -354,11 +367,38 @@ func (d *driver) useFreeleechToken() bool {
 // when withToken is true; it is NEVER sent as usetoken=0 (the OPS quirk — and harmless
 // for RED), so the param is simply omitted when off.
 func (d *driver) downloadLink(torrentID int64, withToken bool) string {
-	link := fmt.Sprintf("%sajax.php?action=download&id=%d", d.BaseURL, torrentID)
+	path := "ajax.php"
+	if d.profile.downloadViaTorrents {
+		path = "torrents.php"
+	}
+	link := fmt.Sprintf("%s%s?action=download&id=%d", d.BaseURL, path, torrentID)
 	if withToken {
 		link += "&usetoken=1"
 	}
 	return link
+}
+
+func (d *driver) applyProfile(release *normalizer.Release, groupID, torrentID int64, tags []string) {
+	if d.profile.site == "alpharatio" {
+		release.Details = fmt.Sprintf("%storrents.php?id=%d&torrentid=%d", d.BaseURL, groupID, torrentID)
+		release.IMDBID = imdbTag(tags)
+	}
+	release.MinimumRatio = d.profile.minimumRatio
+	release.MinimumSeedTime = d.profile.minimumSeedTime
+}
+
+func imdbTag(tags []string) string {
+	for _, tag := range tags {
+		value := strings.ToLower(strings.TrimSpace(tag))
+		if !strings.HasPrefix(value, "tt") {
+			continue
+		}
+		id, err := strconv.ParseInt(value[2:], 10, 64)
+		if err == nil && id > 0 {
+			return fmt.Sprintf("tt%07d", id)
+		}
+	}
+	return ""
 }
 
 // categories maps a result's Category (a description string like "Music"/"Audiobooks")
@@ -397,6 +437,40 @@ func (d *driver) publishDate(value string) string {
 		return ""
 	}
 	return out
+}
+
+// scrubCredentials removes configured credentials and every AlphaRatio session that
+// can overlap an in-flight request through the shared Base.Scrub chokepoint:
+// apikey/password ride in via Base.Scrub's own IsSecret-derived set (both are
+// declared secret settings), while username (not IsSecret — it is not a stored
+// secret, only a value the driver still submits to the tracker) and every AlphaRatio
+// session cookie (undeclared in Settings, so Base.Scrub never sees it on its own)
+// are supplied as extras. Session cookies are covered in both serialized-header and
+// bare-value forms.
+func (d *driver) scrubCredentials(s, requestCookie string) string {
+	extras := append([]string{d.Cfg["username"]},
+		cookieScrubExtras(d.Cfg[alphaRatioCookieSetting], requestCookie, d.sessionSnapshot().cookie)...)
+	return d.Scrub(s, extras...)
+}
+
+// cookieScrubExtras expands each non-empty serialized cookie into itself plus its
+// component bare values, matching Base.Scrub's literal-substring contract. Malformed
+// input still contributes its exact raw form.
+func cookieScrubExtras(cookies ...string) []string {
+	var extra []string
+	for _, raw := range cookies {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		extra = append(extra, raw)
+		for _, cookie := range parseCookieHeader(raw) {
+			if value := strings.TrimSpace(cookie.Value); value != "" {
+				extra = append(extra, value)
+			}
+		}
+	}
+	return extra
 }
 
 // sortReleases orders releases by PublishDate descending to mirror Prowlarr's terminal
