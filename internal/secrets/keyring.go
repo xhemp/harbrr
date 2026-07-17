@@ -42,6 +42,7 @@ type KeyringOptions struct {
 // tracker credentials; the key never leaves this struct.
 type Keyring struct {
 	key       []byte
+	tokenKey  []byte
 	keyID     string
 	plaintext bool
 }
@@ -71,6 +72,25 @@ func (k *Keyring) Decrypt(instanceID int64, setting, blob string) (string, error
 		return blob, nil
 	}
 	pt, err := open(k.key, aad(instanceID, setting), blob)
+	if err != nil {
+		return "", err
+	}
+	return string(pt), nil
+}
+
+// SealToken encrypts and authenticates an application token for purpose. Unlike
+// Encrypt, this always uses AEAD even when credential storage is in plaintext mode:
+// accepting plaintext at rest must not make network bearer tokens forgeable. The
+// token key is stable when an encryption key is configured and process-local when
+// plaintext mode is enabled, so plaintext-mode tokens expire across restarts.
+func (k *Keyring) SealToken(purpose, plaintext string) (string, error) {
+	return seal(k.tokenKey, tokenAAD(purpose), []byte(plaintext))
+}
+
+// OpenToken authenticates and decrypts a token sealed for the same purpose. A
+// purpose mismatch or any token tampering fails without exposing its contents.
+func (k *Keyring) OpenToken(purpose, blob string) (string, error) {
+	pt, err := open(k.tokenKey, tokenAAD(purpose), blob)
 	if err != nil {
 		return "", err
 	}
@@ -121,7 +141,7 @@ func resolveConfiguredKey(opts KeyringOptions) ([]byte, error) {
 func openAutoKeyring(opts KeyringOptions, log zerolog.Logger) (*Keyring, error) {
 	if opts.DataDir == "" {
 		if opts.AllowPlaintext {
-			return plaintextKeyring(log), nil
+			return newPlaintextKeyring(log)
 		}
 		return nil, errors.New("secrets: no encryption key configured and data_dir is empty — set secrets.encryption_key or secrets.key_file, provide a data_dir for the auto-generated keyfile, or set secrets.allow_plaintext to store unencrypted")
 	}
@@ -136,7 +156,7 @@ func openAutoKeyring(opts KeyringOptions, log zerolog.Logger) (*Keyring, error) 
 	}
 
 	if opts.AllowPlaintext {
-		return plaintextKeyring(log), nil
+		return newPlaintextKeyring(log)
 	}
 
 	key, err = generateKeyFile(autoPath)
@@ -149,16 +169,35 @@ func openAutoKeyring(opts KeyringOptions, log zerolog.Logger) (*Keyring, error) 
 	return newKeyring(key), nil
 }
 
-// plaintextKeyring builds the unencrypted keyring, warning loudly (the explicit
-// allow_plaintext opt-in).
-func plaintextKeyring(log zerolog.Logger) *Keyring {
+// newPlaintextKeyring builds the unencrypted credential keyring, warning loudly
+// (the explicit allow_plaintext opt-in). It still generates an in-memory token key:
+// plaintext credential storage does not authorize forgeable network tokens.
+func newPlaintextKeyring(log zerolog.Logger) (*Keyring, error) {
+	tokenKey := make([]byte, keyLen)
+	if _, err := rand.Read(tokenKey); err != nil {
+		return nil, fmt.Errorf("secrets: generate transient token key: %w", err)
+	}
 	log.Warn().Msg("secrets: allow_plaintext is set and no encryption key is configured — tracker credentials will be stored UNENCRYPTED")
-	return &Keyring{plaintext: true, keyID: plaintextKeyID}
+	return &Keyring{tokenKey: tokenKey, plaintext: true, keyID: plaintextKeyID}, nil
 }
 
 // newKeyring builds an encrypting Keyring with a key_id derived from the key.
 func newKeyring(key []byte) *Keyring {
-	return &Keyring{key: key, keyID: deriveKeyID(key)}
+	return &Keyring{key: key, tokenKey: deriveTokenKey(key), keyID: deriveKeyID(key)}
+}
+
+// deriveTokenKey domain-separates network-token encryption from credential-at-rest
+// encryption even when both originate from the configured key.
+func deriveTokenKey(key []byte) []byte {
+	material := make([]byte, 0, len("harbrr-token-key\x00")+len(key))
+	material = append(material, "harbrr-token-key\x00"...)
+	material = append(material, key...)
+	sum := sha256.Sum256(material)
+	return sum[:]
+}
+
+func tokenAAD(purpose string) []byte {
+	return []byte("harbrr-token\x00" + purpose)
 }
 
 // deriveKeyID is a stable, one-way identifier for a key: the first 64 bits of its

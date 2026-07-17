@@ -199,21 +199,42 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
-  /api/auth/oidc/login:
+  /api/auth/oidc/config:
     get:
-      summary: OIDC login (not implemented — deferred to a later phase)
-      operationId: oidcLogin
+      summary: OIDC/SSO configuration for the login screen
+      description: >
+        Public (no auth). Answers {enabled:false, ...} when OIDC is disabled or
+        failed to initialize — never an error, since a logged-out visitor has
+        no session to fail on. When enabled, generates a fresh state (and, when
+        the provider supports it, a PKCE challenge) stored in the session, and
+        returns the ready-to-use authorization URL.
+      operationId: getOIDCConfig
       tags: [Authentication]
       responses:
-        "501": { description: OIDC is not implemented yet }
+        "200":
+          description: the OIDC configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OIDCConfig" }
 
   /api/auth/oidc/callback:
     get:
-      summary: OIDC callback (not implemented — deferred to a later phase)
+      summary: OIDC/SSO callback
+      description: >
+        Public (no auth). Validates state, exchanges the authorization code,
+        verifies the ID token, and establishes a session exactly like
+        POST /api/auth/login (RenewToken, then a CSRF token is issued), before
+        redirecting into the app.
       operationId: oidcCallback
       tags: [Authentication]
+      parameters:
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string } }
       responses:
-        "501": { description: OIDC is not implemented yet }
+        "302": { description: authenticated; redirected into the app }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: OIDC is not configured }
 
   /api/definitions:
     get:
@@ -937,6 +958,24 @@ paths:
               schema: { $ref: "#/components/schemas/AnnounceConnection" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update an announce target (a new apiKey rotates the tool credential)
+      operationId: updateAnnounceConnection
+      tags: [Announce]
+      security: [{ session: [] }, { apiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAnnounceConnection" }
+      responses:
+        "204": { description: updated }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
     delete:
       summary: Delete an announce target (revokes its minted key)
       operationId: deleteAnnounceConnection
@@ -972,6 +1011,29 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
       responses:
         "204": { description: disabled }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/announce-connections/{id}/test:
+    post:
+      summary: Test an announce target's reachability (qui also validates its API key)
+      description: >
+        Probes the target WITHOUT injecting anything. qui posts a synthetic, non-mutating
+        webhook/check — validating reachability AND the API key. cross-seed v6 has no authed
+        health endpoint, so it hits the unauthenticated /api/ping — reachability ONLY, the
+        key is not verified.
+      operationId: testAnnounceConnection
+      tags: [Announce]
+      security: [{ session: [] }, { apiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "200":
+          description: the test result (ok=false carries a scrubbed error)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -2074,7 +2136,8 @@ components:
           description: >
             machine-readable code clients can branch on — one of: bad_request,
             invalid, unauthorized, invalid_credentials, invalid_api_key, forbidden,
-            not_found, conflict, already_setup, not_implemented, internal.
+            not_found, conflict, already_setup, not_implemented, internal. An OIDC
+            ID-token verification failure also uses invalid_credentials.
       required: [error, code]
     ReservedSettings:
       type: object
@@ -2103,6 +2166,18 @@ components:
         username: { type: string }
         password: { type: string }
       required: [username, password]
+    OIDCConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        authorizationUrl:
+          type: string
+          description: pre-built with state (and PKCE challenge, when supported) — empty when disabled
+        disableBuiltInLogin:
+          type: boolean
+          description: hide the password form in the UI (POST /api/auth/login stays registered either way)
+        issuerUrl: { type: string }
+      required: [enabled, authorizationUrl, disableBuiltInLogin, issuerUrl]
     ChangePassword:
       type: object
       properties:
@@ -2476,6 +2551,17 @@ components:
         apiKey: { type: string, description: the tool's API key (stored encrypted) }
         harbrrUrl: { type: string, description: "the base URL the tool uses to reach harbrr's /dl link (both kinds fetch it)" }
       required: [name, kind, baseUrl, apiKey, harbrrUrl]
+    UpdateAnnounceConnection:
+      type: object
+      description: >
+        A partial update; omitted fields are unchanged. apiKey, when present, rotates the
+        stored tool credential (omit it to keep the stored key — never re-submit the
+        <redacted> sentinel). kind is immutable (change it by delete + recreate).
+      properties:
+        name: { type: string }
+        baseUrl: { type: string }
+        apiKey: { type: string }
+        harbrrUrl: { type: string }
     Notification:
       type: object
       description: >

@@ -679,11 +679,16 @@ func settingFields(def *loader.Definition) map[string]loader.SettingsField {
 	return m
 }
 
-// validateRequiredSettings rejects missing, empty, and whitespace-only values for
-// definition fields marked required.
+// validateRequiredSettings rejects missing, empty, whitespace-only, and
+// redacted-placeholder values for definition fields marked required — a client
+// echoing the <redacted> read-back sentinel must never persist it as the secret.
 func validateRequiredSettings(fields map[string]loader.SettingsField, settings map[string]string) error {
 	for name, field := range fields {
-		if field.Required && strings.TrimSpace(settings[name]) == "" {
+		if !field.Required {
+			continue
+		}
+		value := settings[name]
+		if strings.TrimSpace(value) == "" || secrets.IsRedacted(value) {
 			return fmt.Errorf("%w: setting %q is required", ErrInvalid, name)
 		}
 	}

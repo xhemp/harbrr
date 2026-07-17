@@ -24,6 +24,7 @@ export type CreateConnection = components["schemas"]["CreateConnection"]
 export type UpdateConnection = components["schemas"]["UpdateConnection"]
 export type AnnounceConnection = components["schemas"]["AnnounceConnection"]
 export type CreateAnnounceConnection = components["schemas"]["CreateAnnounceConnection"]
+export type UpdateAnnounceConnection = components["schemas"]["UpdateAnnounceConnection"]
 export type Notification = components["schemas"]["Notification"]
 export type CreateNotification = components["schemas"]["CreateNotification"]
 export type UpdateNotification = components["schemas"]["UpdateNotification"]
@@ -78,6 +79,7 @@ export type IndexerStatus = operations["indexerStatus"]["responses"]["200"]["con
 export type SearchParams = NonNullable<operations["searchIndexer"]["parameters"]["query"]>
 
 export type Credentials = components["schemas"]["Credentials"]
+export type OIDCConfig = components["schemas"]["OIDCConfig"]
 
 // The keep-stored sentinel for secret settings (see openapi.yaml Setting) — a value,
 // not a spec-mirrored type, so it stays hand-written.
@@ -114,6 +116,14 @@ function readCsrfCookie(): string {
 }
 
 type ErrorBody = { error?: string, code?: string }
+
+// filenameFromContentDisposition pulls filename="..." out of an attachment
+// Content-Disposition header, falling back to a dated default when the header
+// is absent or unparseable.
+function filenameFromContentDisposition(header: string | null): string {
+  const match = header?.match(/filename="?([^"; ]+)"?/)
+  return match?.[1] ?? `harbrr-backup-${new Date().toISOString().slice(0, 10)}.json`
+}
 
 // ApiClient is the single choke point every management call goes through:
 // base-path prefixing, CSRF header injection on mutations, the {error, code}
@@ -173,9 +183,25 @@ export class ApiClient {
     return readCsrfCookie() || this.csrfToken
   }
 
+  // toAPIError builds the thrown error for a non-ok response, applying the same
+  // 401 hard-redirect exemptions the old hand-rolled request() used. Split out of
+  // unwrap so exportBackup (which needs the raw Response for its headers, not a
+  // JSON-unwrapped value) can share the same error mapping.
+  private toAPIError(response: Response, error: unknown, endpoint: string): APIError {
+    const body = (typeof error === "object" && error !== null ? error : undefined) as ErrorBody | undefined
+    let code = "internal"
+    let message = response.statusText
+    if (body?.code) code = body.code
+    if (body?.error) message = body.error
+    const onAuthScreen = ["/login", "/setup"].includes(window.location.pathname.replace(getBaseUrl(), ""))
+    if (response.status === 401 && !AUTH_BOOTSTRAP.has(endpoint) && !onAuthScreen) {
+      this.onUnauthorized()
+    }
+    return new APIError(response.status, code, message)
+  }
+
   // unwrap turns an openapi-fetch {data, error, response} result into the resolved
-  // value or a thrown APIError, applying the same 401 hard-redirect exemptions the
-  // old hand-rolled request() used. T is INFERRED from the typed client call's data
+  // value or a thrown APIError. T is INFERRED from the typed client call's data
   // shape — never pass it explicitly — so each method's declared return type is
   // checked against what the generated types say the endpoint actually returns.
   private async unwrap<T>(
@@ -183,18 +209,7 @@ export class ApiClient {
     endpoint: string
   ): Promise<T> {
     const { data, error, response } = await call
-    if (!response.ok) {
-      const body = (typeof error === "object" && error !== null ? error : undefined) as ErrorBody | undefined
-      let code = "internal"
-      let message = response.statusText
-      if (body?.code) code = body.code
-      if (body?.error) message = body.error
-      const onAuthScreen = ["/login", "/setup"].includes(window.location.pathname.replace(getBaseUrl(), ""))
-      if (response.status === 401 && !AUTH_BOOTSTRAP.has(endpoint) && !onAuthScreen) {
-        this.onUnauthorized()
-      }
-      throw new APIError(response.status, code, message)
-    }
+    if (!response.ok) throw this.toAPIError(response, error, endpoint)
     return data as T
   }
 
@@ -227,6 +242,18 @@ export class ApiClient {
       this.http.POST("/api/auth/change-password", { body: { currentPassword, newPassword } }),
       "/api/auth/change-password"
     )
+  }
+
+  // getOIDCConfig probes the login screen's OIDC/SSO posture. The endpoint itself
+  // always answers 200 (disabled default) even when OIDC isn't configured — the
+  // catch here is a defensive fallback for the request failing outright (network,
+  // server down), so the login screen still renders the password form.
+  async getOIDCConfig(): Promise<OIDCConfig> {
+    try {
+      return await this.unwrap(this.http.GET("/api/auth/oidc/config"), "/api/auth/oidc/config")
+    } catch {
+      return { enabled: false, authorizationUrl: "", disableBuiltInLogin: false, issuerUrl: "" }
+    }
   }
 
   // --- definitions ---
@@ -299,6 +326,27 @@ export class ApiClient {
       this.http.GET("/api/indexers/{slug}/crossseed-snippet", { params: { path: { slug } } }),
       "/api/indexers/{slug}/crossseed-snippet"
     )
+  }
+
+  // --- backup export/import ---
+
+  // exportBackup returns the encrypted bundle as a downloadable Blob rather than
+  // going through unwrap: the response is offered as a file (Content-Disposition:
+  // attachment), so the caller needs the raw bytes/filename, not a JSON-unwrapped
+  // value. The bundle itself is still JSON (the {schemaVersion, payload} envelope),
+  // so the parsed `data` is re-serialized into the Blob.
+  async exportBackup(passphrase: string): Promise<{ blob: Blob, filename: string }> {
+    const { data, error, response } = await this.http.POST("/api/export", { body: { passphrase } })
+    if (!response.ok) throw this.toAPIError(response, error, "/api/export")
+    const filename = filenameFromContentDisposition(response.headers.get("Content-Disposition"))
+    return { blob: new Blob([JSON.stringify(data)], { type: "application/json" }), filename }
+  }
+
+  // importBackup restores a bundle (wipe-and-load). 409 (non-empty instance, no
+  // force) and 400 (wrong passphrase / malformed payload) surface as APIError with
+  // the matching `.status` for the caller to branch on.
+  importBackup(payload: string, passphrase: string, force?: boolean): Promise<void> {
+    return this.unwrap(this.http.POST("/api/import", { body: { payload, passphrase, force } }), "/api/import")
   }
 
   // --- settings surfaces ---
@@ -553,6 +601,15 @@ export class ApiClient {
     return this.unwrap(this.http.POST("/api/announce-connections", { body }), "/api/announce-connections")
   }
 
+  // The server answers 204 on update; see the updateIndexer note (no caller reads
+  // the resolved value — useUpdateAnnounce invalidates and refetches instead).
+  updateAnnounceConnection(id: number, body: UpdateAnnounceConnection): Promise<void> {
+    return this.unwrap(
+      this.http.PATCH("/api/announce-connections/{id}", { params: { path: { id } }, body }),
+      "/api/announce-connections/{id}"
+    )
+  }
+
   deleteAnnounceConnection(id: number): Promise<void> {
     return this.unwrap(
       this.http.DELETE("/api/announce-connections/{id}", { params: { path: { id } } }),
@@ -567,6 +624,13 @@ export class ApiClient {
     ): this.unwrap(
       this.http.POST("/api/announce-connections/{id}/disable", { params: { path: { id } } }),
       "/api/announce-connections/{id}/disable"
+    )
+  }
+
+  testAnnounceConnection(id: number): Promise<TestResult> {
+    return this.unwrap(
+      this.http.POST("/api/announce-connections/{id}/test", { params: { path: { id } } }),
+      "/api/announce-connections/{id}/test"
     )
   }
 

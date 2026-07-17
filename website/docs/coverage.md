@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**597 trackers** total: 554 Cardigann corpus (all built) · 23 native drivers built · 20 native
+**597 trackers** total: 554 Cardigann corpus (all built) · 24 native drivers built · 19 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -31,6 +31,7 @@ Bespoke code in Jackett/Prowlarr (no Cardigann definition); harbrr ships native 
 | MyAnonamouse | Session cookie (rotating, JSON) | ✅ | ✅ |
 | Redacted | Gazelle (cookie/key → ajax.php) | ✅ | ⬜ |
 | Orpheus | Gazelle (cookie/key → ajax.php) | ✅ | ⬜ |
+| AlphaRatio | Gazelle (session cookie → ajax.php) | ✅ | ⬜ |
 | BroadcastTheNet | Bespoke API | ✅ | ✅ |
 | PassThePopcorn | Bespoke API | ✅ | ✅ |
 | GazelleGames | Bespoke API | ✅ | ⬜ |
@@ -50,7 +51,6 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 | Tracker | Pattern | Built | Live-tested |
 |---|---|:--:|:--:|
 | [SpeedCD](https://github.com/autobrr/harbrr/issues/21) | Session cookie (HTML scrape) | ⬜ | ⬜ |
-| [AlphaRatio](https://github.com/autobrr/harbrr/issues/22) | Session cookie (HTML scrape) | ⬜ | ⬜ |
 | [FunFile](https://github.com/autobrr/harbrr/issues/23) | Session cookie (HTML scrape) | ⬜ | ⬜ |
 | [BitHDTV](https://github.com/autobrr/harbrr/issues/24) | Session cookie (HTML scrape) | ⬜ | ⬜ |
 | [TorrentBytes](https://github.com/autobrr/harbrr/issues/33) | Session cookie (HTML scrape) | ⬜ | ⬜ |

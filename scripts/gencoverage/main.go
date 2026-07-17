@@ -67,6 +67,7 @@ var nativeBuilt = []nativeRow{
 	{name: "MyAnonamouse", pattern: "Session cookie (rotating, JSON)", id: "myanonamouse"},
 	{name: "Redacted", pattern: "Gazelle (cookie/key → ajax.php)", id: "redacted"},
 	{name: "Orpheus", pattern: "Gazelle (cookie/key → ajax.php)", id: "orpheus"},
+	{name: "AlphaRatio", pattern: "Gazelle (session cookie → ajax.php)", id: "alpharatio"},
 	{name: "BroadcastTheNet", pattern: "Bespoke API", id: "broadcastthenet"},
 	{name: "PassThePopcorn", pattern: "Bespoke API", id: "passthepopcorn"},
 	{name: "GazelleGames", pattern: "Bespoke API", id: "gazellegames"},
@@ -83,7 +84,6 @@ var nativeBuilt = []nativeRow{
 // nativePlanned are native drivers we have issues for but haven't built.
 var nativePlanned = []nativeRow{
 	{name: "SpeedCD", pattern: "Session cookie (HTML scrape)", issue: 21},
-	{name: "AlphaRatio", pattern: "Session cookie (HTML scrape)", issue: 22},
 	{name: "FunFile", pattern: "Session cookie (HTML scrape)", issue: 23},
 	{name: "BitHDTV", pattern: "Session cookie (HTML scrape)", issue: 24},
 	{name: "TorrentBytes", pattern: "Session cookie (HTML scrape)", issue: 33},

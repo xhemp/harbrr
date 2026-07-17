@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
-	"github.com/autobrr/harbrr/internal/indexer/native"
 )
 
 // vaArtist is the "various artists" sentinel Prowlarr skips for the artistname param —
@@ -16,23 +16,76 @@ import (
 const vaArtist = "VA"
 
 // Search issues the authenticated browse request for the query and returns the parsed
-// releases. Status classification is the base ClassifyAuth403 dialect: 401/403 is an
-// auth failure wrapped with login.ErrLoginFailed (so the registry records an
-// auth_failure health event), a rate-limit status is a RateLimitedError carrying any
-// Retry-After, any other non-2xx is an error. A 200 body is handed to parseBrowse,
-// which distinguishes a status:"failure" (zero releases or a login error) from a real
-// page. The API key rides in the Authorization header, never the URL, and is never
-// logged.
+// releases. A site with no upstream paging (pageSize == 0: RED/OPS) fetches a single
+// page; a fixed-page site (AlphaRatio) pages its API and renews its session once via
+// sessionRetry after a redirect, 401/403, or auth-failure body. Credentials ride only in
+// request headers/cookies and are never logged.
 func (d *driver) Search(ctx context.Context, q search.Query) ([]*normalizer.Release, error) {
-	req, err := d.newRequest(ctx, d.buildBrowseURL(q))
-	if err != nil {
-		return nil, err
+	if d.site.pageSize > 0 {
+		return d.searchPaged(ctx, q)
 	}
-	resp, err := d.Do(ctx, req, native.ClassifyAuth403)
-	if err != nil {
-		return nil, err
+	return d.searchPage(ctx, d.buildBrowseURL(q))
+}
+
+// searchPage fetches and parses one browse page through sessionRetry: the site's
+// strategy attaches auth on every attempt (newRequest), and an auth-classified failure
+// — from the transport status or from parseBrowse's body inspection — gets exactly one
+// recovery-and-retry via the strategy before surfacing.
+func (d *driver) searchPage(ctx context.Context, rawURL string) ([]*normalizer.Release, error) {
+	return sessionRetry(ctx, d, "search", func(ctx context.Context) ([]*normalizer.Release, error) {
+		req, session, err := d.newRequest(ctx, rawURL)
+		if err != nil {
+			return nil, err
+		}
+		// session is exactly what Prepare attached: its generation tags an
+		// auth failure so Recover renews the right session (empty-session login
+		// 0→1 included), and its cookie is the one to scrub from any error.
+		resp, err := d.Do(d.requestContext(ctx), req, d.site.classify)
+		if err != nil {
+			return nil, withGeneration(err, session.generation)
+		}
+		releases, err := d.parseBrowse(resp.Body, session.cookie)
+		if err != nil {
+			return nil, withGeneration(err, session.generation)
+		}
+		return releases, nil
+	})
+}
+
+// searchPaged translates harbrr's arbitrary offset/limit window to a fixed-page
+// upstream API. It fetches only the pages overlapping the requested window, then trims
+// the leading partial page and requested limit before the shared Torznab paging layer
+// sees the result.
+func (d *driver) searchPaged(ctx context.Context, q search.Query) ([]*normalizer.Release, error) {
+	pageSize := d.site.pageSize
+	limit := q.Limit
+	if limit <= 0 {
+		limit = pageSize
 	}
-	return d.parseBrowse(resp.Body)
+	offset := max(q.Offset, 0)
+	firstPage := offset/pageSize + 1
+	leading := offset % pageSize
+	pagesNeeded := (leading + limit + pageSize - 1) / pageSize
+
+	releases := make([]*normalizer.Release, 0, pagesNeeded*pageSize)
+	for page := firstPage; page < firstPage+pagesNeeded; page++ {
+		pageReleases, err := d.searchPage(ctx, d.buildBrowseURL(q, page))
+		if err != nil {
+			return nil, err
+		}
+		releases = append(releases, pageReleases...)
+		if len(pageReleases) < pageSize {
+			break
+		}
+	}
+	if leading >= len(releases) {
+		return nil, nil
+	}
+	releases = releases[leading:]
+	if len(releases) > limit {
+		releases = releases[:limit]
+	}
+	return releases, nil
 }
 
 // buildBrowseURL composes the ajax.php?action=browse request URL. order_by=time and
@@ -40,9 +93,14 @@ func (d *driver) Search(ctx context.Context, q search.Query) ([]*normalizer.Rele
 // spaces, per Prowlarr); the fielded music params artistname/groupname/year are set when
 // present (artistname is skipped for an empty value or "VA"); and one filter_cat[<id>]=1
 // is emitted per requested tracker category. recordlabel is intentionally NOT sent —
-// RED/OPS do not advertise or use a Label param (Prowlarr RED/OPS RequestGenerator).
-// The URL carries no secret (auth is the Authorization header), so it is safe to log.
-func (d *driver) buildBrowseURL(q search.Query) string {
+// RED/OPS do not advertise or use a Label param (Prowlarr RED/OPS RequestGenerator). A
+// site's buildQuery hook (AlphaRatio's freeleech/scene/IMDB/page params) adds anything
+// beyond this shared set. The URL carries no secret.
+func (d *driver) buildBrowseURL(q search.Query, requestedPage ...int) string {
+	page := 0
+	if len(requestedPage) > 0 {
+		page = requestedPage[0]
+	}
 	params := url.Values{}
 	params.Set("action", "browse")
 	params.Set("order_by", "time")
@@ -59,6 +117,9 @@ func (d *driver) buildBrowseURL(q search.Query) string {
 	if year := strings.TrimSpace(q.Year); year != "" {
 		params.Set("year", year)
 	}
+	if d.site.buildQuery != nil {
+		d.site.buildQuery(d, q, page, params)
+	}
 	encoded := params.Encode()
 	if cats := filterCats(q.Categories); cats != "" {
 		encoded += "&" + cats
@@ -66,10 +127,31 @@ func (d *driver) buildBrowseURL(q search.Query) string {
 	return fmt.Sprintf("%sajax.php?%s", d.BaseURL, encoded)
 }
 
+func truthy(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "on", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
 // sanitizeTerm trims the free-text term and replaces dots with spaces, matching
 // Prowlarr's GazelleRequestGenerator term handling (Trim + Replace(".", " ")).
 func sanitizeTerm(keywords string) string {
 	return strings.ReplaceAll(strings.TrimSpace(keywords), ".", " ")
+}
+
+// fullIMDBID renders an imdb id as Jackett's GetFullImdbId ("tt" + the numeric id, a
+// minimum of seven digits): a leading "tt" is stripped, the rest parsed and
+// zero-padded. A non-numeric id yields "" (the taglist param is then omitted).
+func fullIMDBID(raw string) string {
+	s := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "tt")
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("tt%07d", n)
 }
 
 // filterCats renders the per-category filter_cat[<id>]=1 params Prowlarr emits, one per
