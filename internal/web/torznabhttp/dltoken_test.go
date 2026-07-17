@@ -74,13 +74,26 @@ func TestDLToken_URLSafeAndOpaque(t *testing.T) {
 // decoded under another (the AAD binding prevents replay across indexers).
 func TestDLToken_CrossIndexerRejected(t *testing.T) {
 	t.Parallel()
-	kr := encryptedKeyring(t)
-	token, err := encodeDLToken(kr, "indexerA", dlTestLink)
-	if err != nil {
-		t.Fatalf("encodeDLToken: %v", err)
+
+	tests := []struct {
+		name    string
+		keyring func(*testing.T) *secrets.Keyring
+	}{
+		{name: "encrypted", keyring: encryptedKeyring},
+		{name: "plaintext credentials", keyring: plaintextKeyringForTest},
 	}
-	if _, err := decodeDLToken(kr, "indexerB", token); err == nil {
-		t.Error("expected decode under a different indexer to fail")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			kr := test.keyring(t)
+			token, err := encodeDLToken(kr, "indexerA", dlTestLink)
+			if err != nil {
+				t.Fatalf("encodeDLToken: %v", err)
+			}
+			if _, err := decodeDLToken(kr, "indexerB", token); err == nil {
+				t.Error("expected decode under a different indexer to fail")
+			}
+		})
 	}
 }
 
@@ -115,9 +128,8 @@ func TestDLToken_MalformedRejected(t *testing.T) {
 	}
 }
 
-// TestDLToken_PlaintextModeRoundTrips confirms the codec still works without an
-// encryption key, and that even then the passkey is not literally present in the
-// token (it is base64url-obscured).
+// TestDLToken_PlaintextModeRoundTrips confirms the codec still works when credential
+// storage is plaintext while keeping the network token authenticated and opaque.
 func TestDLToken_PlaintextModeRoundTrips(t *testing.T) {
 	t.Parallel()
 	kr := plaintextKeyringForTest(t)
@@ -134,5 +146,18 @@ func TestDLToken_PlaintextModeRoundTrips(t *testing.T) {
 	}
 	if got != dlTestLink {
 		t.Errorf("round trip = %q, want %q", got, dlTestLink)
+	}
+}
+
+// TestDLToken_PlaintextModeRejectsForgery proves a feed API-key holder cannot forge
+// a token by base64url-encoding an attacker-selected URL when credentials are stored
+// in plaintext mode.
+func TestDLToken_PlaintextModeRejectsForgery(t *testing.T) {
+	t.Parallel()
+
+	kr := plaintextKeyringForTest(t)
+	forged := base64.RawURLEncoding.EncodeToString([]byte("http://127.0.0.1/private"))
+	if _, err := decodeDLToken(kr, "mytracker", forged); err == nil {
+		t.Fatal("plaintext-mode forged token decoded successfully")
 	}
 }

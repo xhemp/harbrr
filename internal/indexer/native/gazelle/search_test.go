@@ -16,10 +16,9 @@ import (
 )
 
 // recordedReq captures one issued request for assertions a black-box transport cannot
-// otherwise make: the URL (which must NEVER carry the apikey) and the Authorization
-// header (which carries the per-site-prefixed apikey).
+// otherwise make: URL and supported authentication headers.
 type recordedReq struct {
-	method, url, authorization, accept string
+	method, url, authorization, cookie, userAgent, accept string
 }
 
 // scriptDoer records every request and serves a single scripted response.
@@ -28,11 +27,19 @@ type scriptDoer struct {
 	reqs []recordedReq
 }
 
+type doerFunc func(*stdhttp.Request) (*stdhttp.Response, error)
+
+func (f doerFunc) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
+	return f(req)
+}
+
 func (s *scriptDoer) Do(req *stdhttp.Request) (*stdhttp.Response, error) {
 	s.reqs = append(s.reqs, recordedReq{
 		method:        req.Method,
 		url:           req.URL.String(),
 		authorization: req.Header.Get("Authorization"),
+		cookie:        req.Header.Get("Cookie"),
+		userAgent:     req.Header.Get("User-Agent"),
 		accept:        req.Header.Get("Accept"),
 	})
 	if s.resp != nil {
@@ -195,6 +202,55 @@ func TestSearchSuccessReturnsReleases(t *testing.T) {
 	}
 	if len(rels) == 0 {
 		t.Fatalf("want releases, got 0")
+	}
+}
+
+// TestSearchErrorScrubsRequestSessionAcrossRenewal proves response parsing retains the
+// exact session used by the request even when another renewal publishes a newer one.
+func TestSearchErrorScrubsRequestSessionAcrossRenewal(t *testing.T) {
+	t.Parallel()
+	const (
+		configuredValue = "SYNTHETICCONFIGUREDCOOKIE"
+		requestValue    = "SYNTHETICREQUESTCOOKIE"
+		currentValue    = "SYNTHETICCURRENTCOOKIE"
+	)
+	configuredCookie := "session=" + configuredValue
+	requestCookie := "session=" + requestValue
+	currentCookie := "session=" + currentValue
+	body := `{"status":"failure","error":"configured ` + configuredValue +
+		` request ` + requestValue + ` current ` + currentValue + `"}`
+
+	var d *driver
+	doer := doerFunc(func(req *stdhttp.Request) (*stdhttp.Response, error) {
+		if got := req.Header.Get("Cookie"); got != requestCookie {
+			t.Errorf("Cookie = %q, want request snapshot %q", got, requestCookie)
+		}
+		d.sessionMu.Lock()
+		d.session = sessionState{cookie: currentCookie, generation: 3}
+		d.sessionMu.Unlock()
+		return mkResp(stdhttp.StatusOK, body), nil
+	})
+
+	def := familyByID(t, "alpharatio").Definition
+	driverValue, err := New(native.Params{
+		Def:  def,
+		Cfg:  map[string]string{"cookie": configuredCookie},
+		Doer: doer,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	d = driverValue.(*driver)
+	d.session = sessionState{cookie: requestCookie, generation: 2}
+
+	_, err = d.Search(context.Background(), search.Query{Limit: 50})
+	if err == nil {
+		t.Fatal("want tracker error")
+	}
+	for _, secret := range []string{configuredValue, requestValue, currentValue} {
+		if strings.Contains(err.Error(), secret) {
+			t.Errorf("error leaks cookie value %q: %v", secret, err)
+		}
 	}
 }
 

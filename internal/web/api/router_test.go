@@ -22,6 +22,7 @@ import (
 	"github.com/autobrr/harbrr/internal/backup"
 	"github.com/autobrr/harbrr/internal/database"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
+	"github.com/autobrr/harbrr/internal/indexer/native/catalog"
 	"github.com/autobrr/harbrr/internal/indexer/registry"
 	"github.com/autobrr/harbrr/internal/notify"
 	"github.com/autobrr/harbrr/internal/proxy"
@@ -115,8 +116,8 @@ func newEnv(t *testing.T, cfg api.Config) *env {
 // buildCache (when non-nil) is handed the env's database so the cache is backed by
 // the same store the handlers read; a nil builder means caching is off (the
 // /api/cache routes then report a disabled state).
-func newEnvWithCache(t *testing.T, cfg api.Config, buildCache func(db *database.DB) *registry.SearchCache) *env {
-	return newEnvFull(t, cfg, buildCache, zerolog.Nop())
+func newEnvWithCache(t *testing.T, cfg api.Config, buildCache func(db *database.DB) *registry.SearchCache, registryOpts ...registry.Option) *env {
+	return newEnvFull(t, cfg, buildCache, zerolog.Nop(), registryOpts...)
 }
 
 // newEnvWithLogger is newEnv with the router's Deps.Logger swapped for logger, so a test
@@ -127,7 +128,7 @@ func newEnvWithLogger(t *testing.T, cfg api.Config, logger zerolog.Logger) *env 
 }
 
 // newEnvFull is the shared builder behind newEnv/newEnvWithCache/newEnvWithLogger.
-func newEnvFull(t *testing.T, cfg api.Config, buildCache func(db *database.DB) *registry.SearchCache, logger zerolog.Logger) *env {
+func newEnvFull(t *testing.T, cfg api.Config, buildCache func(db *database.DB) *registry.SearchCache, logger zerolog.Logger, registryOpts ...registry.Option) *env {
 	t.Helper()
 
 	db, err := database.Open(":memory:")
@@ -161,7 +162,7 @@ func newEnvFull(t *testing.T, cfg api.Config, buildCache func(db *database.DB) *
 	sm.Lifetime = time.Hour
 
 	authSvc := auth.NewServiceWithPasswordHasher(db, fastPasswordHasher{})
-	reg := registry.New(db, ldr, keyring, nil)
+	reg := registry.New(db, ldr, keyring, catalog.All(), registryOpts...)
 	source := &fakeAppSource{}
 	appSync := appsync.NewService(db, source, authSvc, keyring, http.DefaultClient, zerolog.Nop())
 	announceSvc := announce.NewService(db, authSvc, keyring,

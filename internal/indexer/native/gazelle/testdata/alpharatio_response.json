@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "response": {
+    "currentPage": 2,
+    "pages": 3,
+    "results": [
+      {
+        "groupId": 4400,
+        "groupName": "Example.Movie.2024.1080p.BluRay.x264-GROUP",
+        "torrentId": 5500,
+        "canUseToken": true,
+        "category": "MovieHD",
+        "fileCount": 4,
+        "groupTime": "1704067200",
+        "hasSnatched": false,
+        "isFreeleech": true,
+        "isNeutralLeech": false,
+        "isPersonalFreeleech": false,
+        "leechers": 2,
+        "seeders": 11,
+        "size": 1234567890,
+        "snatches": 5,
+        "tags": ["drama", "tt1234567"]
+      }
+    ]
+  }
+}
