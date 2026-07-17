@@ -40,8 +40,8 @@ func buildDriver(t *testing.T, id string) native.Driver {
 func TestFamilies(t *testing.T) {
 	t.Parallel()
 	fams := Families()
-	if len(fams) != 3 {
-		t.Fatalf("families = %d, want 3", len(fams))
+	if len(fams) != 4 {
+		t.Fatalf("families = %d, want 4", len(fams))
 	}
 
 	cases := []struct {
@@ -52,6 +52,7 @@ func TestFamilies(t *testing.T) {
 		{"redacted", "https://redacted.sh/", redactedDelaySeconds},
 		{"orpheus", "https://orpheus.network/", orpheusDelaySeconds},
 		{"alpharatio", "https://alpharatio.cc/", alphaRatioDelaySeconds},
+		{"brokenstones", "https://brokenstones.is/", brokenStonesDelaySeconds},
 	}
 	for _, c := range cases {
 		f := familyByID(t, c.id)
@@ -106,8 +107,10 @@ func TestSiteAuthStrategy(t *testing.T) {
 			t.Errorf("%q: apiKeyAuth.prefix = %q, want %q", c.id, strategy.prefix, c.want)
 		}
 	}
-	if _, ok := siteConfigs["alpharatio"].strategy.(formLoginAuth); !ok {
-		t.Errorf("alpharatio: strategy = %T, want formLoginAuth", siteConfigs["alpharatio"].strategy)
+	for _, id := range []string{"alpharatio", "brokenstones"} {
+		if _, ok := siteConfigs[id].strategy.(formLoginAuth); !ok {
+			t.Errorf("%s: strategy = %T, want formLoginAuth", id, siteConfigs[id].strategy)
+		}
 	}
 }
 
