@@ -146,7 +146,8 @@ func TestSmoke(t *testing.T) {
 	// same single-tracker cached-path check RunSuite uses (cacheCheck, package-shared
 	// with checks.go): one designated tracker, not per-tracker, keeps this cheap.
 	t.Run("cache", func(t *testing.T) {
-		f := cacheCheck(context.Background(), c, cfg, enabled[0].Slug)
+		cats, _ := harbrrCategories(context.Background(), c, cfg, enabled[0].Slug)
+		f := cacheCheck(context.Background(), c, cfg, enabled[0].Slug, categoryIDsOf(cats))
 		switch f.Status {
 		case StatusSkip:
 			t.Skip(f.Detail)
