@@ -115,9 +115,11 @@ surfaces as a separate `field-parity` finding per tracker:
     check lenient — a unit bug there is caught by category/count checks, not size.
   - `category` — the *major* Torznab bucket (2040 → 2000) must overlap; a movie mis-mapped to TV
     fails. Sub-category granularity and indexer-custom categories (≥ 100000) are ignored.
-  - **download-link shape** — harbrr's `<link>`/`<enclosure>` must be a sealed `/dl` URL or a
+  - **download-link shape** — when the indexer's links are sealed (NeedsResolver /
+    DownloadNeedsAuth), harbrr's `<link>`/`<enclosure>` must be a sealed `/dl` URL or a
     magnet; a raw tracker `passkey`/`torrent_pass`/`authkey`/`rsskey` link fails (parity defect
-    **and** a secret leak).
+    **and** a secret leak). Direct-link trackers (Gazelle-style, no sealing) legitimately serve
+    their credential-bearing links bare — the check is gated on active sealing.
 - **Only under `SMOKE_STRICT_FIELDS=1` (volatile):**
   - `seeders` — presence only: harbrr must report a positive count when Prowlarr reports a healthy
     swarm (≥ 5). Magnitudes move constantly, so they aren't compared.
