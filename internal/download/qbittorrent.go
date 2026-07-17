@@ -10,6 +10,7 @@ import (
 	"github.com/autobrr/go-qbittorrent"
 
 	"github.com/autobrr/harbrr/internal/domain"
+	apphttp "github.com/autobrr/harbrr/internal/http"
 )
 
 // errAddReportedFailure is returned when qBittorrent's add response reports every
@@ -75,11 +76,18 @@ func (d *qbittorrentDriver) Add(ctx context.Context, p Payload, opts AddOptions)
 	)
 	if len(p.Bytes) > 0 {
 		resp, err = d.client.AddTorrentFromMemoryCtx(ctx, p.Bytes, form)
+		if err != nil {
+			return fmt.Errorf("download: qbittorrent: add torrent: %w", err)
+		}
 	} else {
 		resp, err = d.client.AddTorrentFromUrlCtx(ctx, p.URL, form)
-	}
-	if err != nil {
-		return fmt.Errorf("download: qbittorrent: add torrent: %w", err)
+		if err != nil {
+			// go-qbittorrent embeds the submitted URL in its add errors, and a
+			// sealed harbrr /dl link carries the apikey — scrub every occurrence
+			// before surfacing so it can't reach a log.
+			scrubbed := strings.ReplaceAll(err.Error(), p.URL, apphttp.RedactURL(p.URL))
+			return fmt.Errorf("download: qbittorrent: add torrent from %s: %s", apphttp.RedactURL(p.URL), scrubbed)
+		}
 	}
 	if resp.FailureCount > 0 && resp.SuccessCount == 0 {
 		return errAddReportedFailure

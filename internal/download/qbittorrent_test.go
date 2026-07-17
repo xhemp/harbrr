@@ -19,6 +19,7 @@ type qbitStub struct {
 	wantBadCreds bool
 	addForm      map[string][]string // last torrents/add form fields (url-encoded or multipart)
 	addWasBytes  bool                // true if the last add came in as a multipart file upload
+	addConflict  bool                // when true, torrents/add answers 409 (the lib errors with the URL)
 }
 
 func newQbitStub(t *testing.T, s *qbitStub) *httptest.Server {
@@ -46,6 +47,10 @@ func newQbitStub(t *testing.T, s *qbitStub) *httptest.Server {
 				t.Fatalf("parse form: %v", err)
 			}
 			s.addForm = r.Form
+		}
+		if s.addConflict {
+			w.WriteHeader(http.StatusConflict)
+			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
@@ -101,6 +106,26 @@ func TestQBittorrentAdd_ViaURL(t *testing.T) {
 		if got := stub.addForm["urls"]; len(got) != 1 || got[0] != url {
 			t.Fatalf("Add(%s): urls form field = %v, want [%s]", url, got, url)
 		}
+	}
+}
+
+// TestQBittorrentAdd_URLErrorRedactsApikey pins #246: go-qbittorrent embeds the
+// submitted URL in its add errors, and a sealed harbrr /dl link carries the apikey —
+// the driver must scrub it so it can never reach a log.
+func TestQBittorrentAdd_URLErrorRedactsApikey(t *testing.T) {
+	t.Parallel()
+	stub := &qbitStub{addConflict: true}
+	srv := newQbitStub(t, stub)
+	drv := newTestClient(srv.URL, "admin", "adminadmin")
+
+	const apikey = "SECRETAPIKEY0123456789"
+	sealed := "http://harbrr.local/api/indexers/tt/dl?token=abc&apikey=" + apikey
+	err := drv.Add(context.Background(), Payload{Protocol: ProtocolTorrent, URL: sealed}, AddOptions{})
+	if err == nil {
+		t.Fatal("expected an add error from the 409 stub")
+	}
+	if strings.Contains(err.Error(), apikey) {
+		t.Fatalf("error leaks the apikey: %q", err)
 	}
 }
 

@@ -2569,7 +2569,7 @@ components:
         name: { type: string }
         kind:
           type: string
-          enum: [qbittorrent, sabnzbd, nzbget, qui, flood, download-station, transmission, deluge, rtorrent, blackhole]
+          enum: [qbittorrent]
         enabled: { type: boolean }
         host: { type: string }
         username: { type: string }
@@ -2584,7 +2584,7 @@ components:
         name: { type: string }
         kind:
           type: string
-          enum: [qbittorrent, sabnzbd, nzbget, qui, flood, download-station, transmission, deluge, rtorrent, blackhole]
+          enum: [qbittorrent]
         host: { type: string }
         username: { type: string }
         secret: { type: string, description: "optional; stored encrypted" }

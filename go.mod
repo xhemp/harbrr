@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/andybalholm/cascadia v1.3.4
+	github.com/autobrr/go-qbittorrent v1.16.0
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/go-chi/chi/v5 v5.3.1
@@ -26,7 +27,6 @@ require (
 
 require (
 	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/autobrr/go-qbittorrent v1.16.0 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

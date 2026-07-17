@@ -1786,7 +1786,7 @@ export interface components {
             id: number;
             name: string;
             /** @enum {string} */
-            kind: "qbittorrent" | "sabnzbd" | "nzbget" | "qui" | "flood" | "download-station" | "transmission" | "deluge" | "rtorrent" | "blackhole";
+            kind: "qbittorrent";
             enabled: boolean;
             host: string;
             username: string;
@@ -1801,7 +1801,7 @@ export interface components {
         CreateDownloadClient: {
             name: string;
             /** @enum {string} */
-            kind: "qbittorrent" | "sabnzbd" | "nzbget" | "qui" | "flood" | "download-station" | "transmission" | "deluge" | "rtorrent" | "blackhole";
+            kind: "qbittorrent";
             host: string;
             username?: string;
             /** @description optional; stored encrypted */
