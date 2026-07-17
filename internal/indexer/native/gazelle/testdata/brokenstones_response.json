@@ -1,0 +1,27 @@
+{
+  "status": "success",
+  "response": {
+    "currentPage": 1,
+    "pages": 1,
+    "results": [
+      {
+        "groupId": 100,
+        "groupName": "Example.App.1.2.3.macOS-GROUP",
+        "torrentId": 200,
+        "canUseToken": true,
+        "category": "MacOS Apps",
+        "fileCount": 3,
+        "groupTime": "1704067200",
+        "hasSnatched": false,
+        "isFreeleech": false,
+        "isNeutralLeech": false,
+        "isPersonalFreeleech": false,
+        "leechers": 1,
+        "seeders": 7,
+        "size": 987654321,
+        "snatches": 2,
+        "tags": ["macos"]
+      }
+    ]
+  }
+}

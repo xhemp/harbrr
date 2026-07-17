@@ -182,8 +182,8 @@ make build                                   # -> bin/harbrr (embeds web/dist)
 
 ## Status & testing
 
-harbrr is **alpha**, but the engine is heavily validated. It ships **575 trackers** — 556 from
-the embedded Cardigann corpus plus 24 native drivers (with **19 more native drivers planned**) —
+harbrr is **alpha**, but the engine is heavily validated. It ships **579 trackers** — 554 from
+the embedded Cardigann corpus plus 25 native drivers (with **18 more native drivers planned**) —
 and every shipped tracker passes its **offline golden tests**. Live validation against real
 trackers and a real \*arr stack is tracked separately:
 

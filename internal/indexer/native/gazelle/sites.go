@@ -51,6 +51,10 @@ type siteConfig struct {
 // own, even if they happen to reuse this name).
 const alphaRatioCookieSetting = "cookie"
 
+// brokenStonesCookieSetting is BrokenStones' persisted-session setting name (#31) — its
+// own siteConfig data, happening to reuse AlphaRatio's "cookie" name.
+const brokenStonesCookieSetting = "cookie"
+
 // siteConfigs is the Gazelle family's data table: one entry per site, keyed by
 // definition id. Adding a site (the planned #28-#31) is a table entry here — never an
 // edit to auth.go/parse.go/search.go/grab.go.
@@ -75,6 +79,17 @@ var siteConfigs = map[string]siteConfig{
 		minimumSeedTime:      259200,
 		buildQuery:           alphaRatioBuildQuery,
 		parseProfile:         alphaRatioParseProfile,
+	},
+	// brokenstones (#31) is a plain GazelleBase<GazelleSettings> in Prowlarr — no
+	// AlphaRatio-only settings (FreeleechOnly/ExcludeScene), no pagination override, and
+	// no download-URL override — so it reuses formLoginAuth for username/password login
+	// plus the shared RED/OPS browse/download path unchanged (buildQuery/parseProfile
+	// nil, pageSize/downloadViaTorrents at their RED/OPS defaults).
+	"brokenstones": {
+		strategy:             formLoginAuth{},
+		sessionCookieSetting: brokenStonesCookieSetting,
+		classify:             classifyFormLogin,
+		disableRedirects:     true,
 	},
 }
 
@@ -118,6 +133,9 @@ const (
 	redactedDelaySeconds   = 1.0
 	orpheusDelaySeconds    = 2.0
 	alphaRatioDelaySeconds = 3.0
+	// brokenStonesDelaySeconds is a conservative default in the absence of a published
+	// rate limit (Prowlarr's BrokenStones doesn't override GazelleBase's RateLimit).
+	brokenStonesDelaySeconds = 2.0
 )
 
 // Families returns the Gazelle-family sites as native families. Each carries a
@@ -128,6 +146,7 @@ func Families() []native.Family {
 		{Definition: siteDef("redacted", "Redacted", "https://redacted.sh/", redactedDelaySeconds), Factory: New},
 		{Definition: siteDef("orpheus", "Orpheus", "https://orpheus.network/", orpheusDelaySeconds), Factory: New},
 		{Definition: alphaRatioDef(), Factory: New},
+		{Definition: brokenStonesDef(), Factory: New},
 	}
 }
 
@@ -195,6 +214,57 @@ func alphaRatioCaps() loader.Caps {
 			Search:      []string{"q"},
 			MovieSearch: []string{"q", "imdbid"},
 			TVSearch:    []string{"q", "season", "ep"},
+		},
+	}
+}
+
+// brokenStonesDef builds BrokenStones' (#31) caps-only definition. Source: Prowlarr's
+// src/NzbDrone.Core/Indexers/Definitions/BrokenStones.cs (GazelleBase<GazelleSettings>,
+// IndexerUrls: https://brokenstones.is/).
+func brokenStonesDef() *loader.Definition {
+	delay := brokenStonesDelaySeconds
+	return &loader.Definition{
+		ID:           "brokenstones",
+		Name:         "BrokenStones",
+		Description:  "BrokenStones (native Gazelle-family driver)",
+		Language:     "en-US",
+		Type:         "private",
+		Encoding:     "UTF-8",
+		Links:        []string{"https://brokenstones.is/"},
+		RequestDelay: &delay,
+		Settings:     brokenStonesSettings(),
+		Caps:         brokenStonesCaps(),
+	}
+}
+
+// brokenStonesSettings are the user-entered fields: username/password (form login, per
+// ADR 0003) plus the use_freeleech_token checkbox every GazelleSettings site carries.
+// Unlike AlphaRatio, Prowlarr's BrokenStones has no FreeleechOnly/ExcludeScene fields.
+func brokenStonesSettings() []loader.SettingsField {
+	return []loader.SettingsField{
+		{Name: "username", Label: "Username", Type: "text", Required: true},
+		{Name: "password", Label: "Password", Type: "password", Required: true},
+		{Name: "use_freeleech_token", Label: "Use freeleech token", Type: "checkbox"},
+	}
+}
+
+// brokenStonesCaps mirrors Prowlarr's BrokenStones.SetCapabilities category mapping
+// exactly (a MacOS/iOS apps-and-games tracker, not RED/OPS's music categories). Prowlarr
+// sets no Tv/Movie/Music search params for this site, so only basic q search applies.
+func brokenStonesCaps() loader.Caps {
+	return loader.Caps{
+		CategoryMappings: []loader.CategoryMapping{
+			cat("1", "PC/Mac", "MacOS Apps"),
+			cat("2", "PC/Mac", "MacOS Games"),
+			cat("3", "PC/Mobile-iOS", "iOS Apps"),
+			cat("4", "PC/Mobile-iOS", "iOS Games"),
+			cat("5", "Other", "Graphics"),
+			cat("6", "Audio", "Audio"),
+			cat("7", "Other", "Tutorials"),
+			cat("8", "Other", "Other"),
+		},
+		Modes: loader.Modes{
+			Search: []string{"q"},
 		},
 	}
 }
