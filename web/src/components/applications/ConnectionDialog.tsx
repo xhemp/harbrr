@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useInitialAppPick } from "@/hooks/useInitialAppPick"
 import { ConfiguredAppsBlock, ReusingAppHint } from "@/components/applications/ConfiguredApps"
 import { ManagedByAppHint } from "@/components/applications/ManagedByAppHint"
 import { Button } from "@/components/ui/button"
@@ -37,7 +38,7 @@ function defaultFreeleechMode(kind: ConnectionKind): "honor" | "bypass" {
 
 export type ConnectionDialogState =
   | { open: false }
-  | { open: true, existing?: AppConnection }
+  | { open: true, existing?: AppConnection, initialAppId?: number }
 
 // Create/edit dialog for an app-sync target. The app's API key is stored
 // encrypted and never read back: on edit the field starts empty and is only
@@ -56,6 +57,7 @@ export function ConnectionDialog({ state, pending, error, onClose, onCreate, onU
         {state.open && (
           <ConnectionForm
             existing={state.existing}
+            initialAppId={state.initialAppId}
             pending={pending}
             error={error}
             onCreate={onCreate}
@@ -67,13 +69,16 @@ export function ConnectionDialog({ state, pending, error, onClose, onCreate, onU
   )
 }
 
-function ConnectionForm({ existing, pending, error, onCreate, onUpdate }: {
+function ConnectionForm({ existing, initialAppId, pending, error, onCreate, onUpdate }: {
   existing?: AppConnection
+  initialAppId?: number
   pending: boolean
   error: unknown
   onCreate: (body: CreateConnection) => void
   onUpdate: (id: number, body: UpdateConnection) => void
 }) {
+  const apps = useApps()
+
   const [name, setName] = useState(existing?.name ?? "")
   const [kind, setKind] = useState<ConnectionKind>(existing?.kind ?? "sonarr")
   // Create-only: which App backs this connection. `null` means the operator hasn't
@@ -90,8 +95,16 @@ function ConnectionForm({ existing, pending, error, onCreate, onUpdate }: {
   const [freeleechMode, setFreeleechMode] = useState<"" | "honor" | "bypass">(existing?.freeleechMode ?? "")
   const [syncProfileId, setSyncProfileId] = useState<number | null>(existing?.syncProfileId ?? null)
 
+  // "Use as…" deep-link (autobrr/harbrr#300): pre-pick the App the same way
+  // ConfiguredAppsBlock's onPick below does (kind + app selected, name defaulted if
+  // blank).
+  useInitialAppPick(initialAppId, apps.data, (app) => {
+    setKind(app.kind as ConnectionKind)
+    setAppSel(String(app.id))
+    setName((prev) => (prev === "" ? app.name : prev))
+  })
+
   const profiles = useSyncProfiles()
-  const apps = useApps()
   const mode = existing ? "edit" : "create"
   const message = error instanceof Error ? error.message : null
   // Profiles never apply to qui — it has no per-content-type category concept.
