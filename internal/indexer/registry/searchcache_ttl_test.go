@@ -1,10 +1,13 @@
 package registry
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/autobrr/harbrr/internal/indexer/cardigann/normalizer"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/search"
+	"github.com/autobrr/harbrr/internal/indexer/core"
 )
 
 func testTTLConfig() ttlConfig {
@@ -126,5 +129,118 @@ func TestIsEmptyQuery(t *testing.T) {
 				t.Fatalf("isEmptyQuery = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// clampFixtureReleases exceeds keywordTTL's thinThreshold (5) so a stored entry gets
+// the full 30m keyword tier, not the 2m thin clamp — the clamp tests below need
+// headroom between the tiers they compare.
+func clampFixtureReleases() []*normalizer.Release {
+	return relSet("a1", "a2", "a3", "a4", "a5", "a6")
+}
+
+// TestReadTimeTTLClampMissesOnLoweredTier proves a config-mutation that LOWERS a TTL
+// tier (autobrr/harbrr#351) takes effect on an already-stored entry at the very next
+// read: once the clock has passed what the CURRENT tuning would grant — but before
+// the entry's original, now too-generous, stored expiry — the read is treated as a
+// miss and drives a fresh live search, rather than serving stale content until the
+// entry's original expiry (the only prior remedy being a full cache flush).
+func TestReadTimeTTLClampMissesOnLoweredTier(t *testing.T) {
+	t.Parallel()
+	sc, instID, clk := testCache(t, keywordTTL, 0) // keyword tier = 30m
+	inner := &fakeInner{releases: clampFixtureReleases()}
+	idx := sc.probe(inner, instID, nil)
+	q := search.Query{Keywords: "clamp"}
+
+	if _, err := idx.Search(context.Background(), q); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+	if c := inner.callCount(); c != 1 {
+		t.Fatalf("prime call count = %d, want 1", c)
+	}
+
+	shorter := 10 * time.Minute
+	if _, err := sc.UpdateConfig(context.Background(), CacheConfigPatch{KeywordTTL: &shorter}); err != nil {
+		t.Fatalf("UpdateConfig: %v", err)
+	}
+
+	// Past the NEW 10m tier but well before the stored 30m expiry.
+	advance(clk, 15*time.Minute)
+
+	if _, err := idx.Search(context.Background(), q); err != nil {
+		t.Fatalf("clamped read: %v", err)
+	}
+	if c := inner.callCount(); c != 2 {
+		t.Fatalf("inner called %d times after the lowered-tier clamp, want 2 (fresh miss)", c)
+	}
+}
+
+// TestReadTimeTTLClampStillHitsUnderUnchangedTuning proves the clamp is a no-op when
+// the tuning never moved: the same elapsed time that misses in
+// TestReadTimeTTLClampMissesOnLoweredTier still serves a hit here.
+func TestReadTimeTTLClampStillHitsUnderUnchangedTuning(t *testing.T) {
+	t.Parallel()
+	sc, instID, clk := testCache(t, keywordTTL, 0) // keyword tier = 30m
+	inner := &fakeInner{releases: clampFixtureReleases()}
+	idx := sc.probe(inner, instID, nil)
+	q := search.Query{Keywords: "clamp"}
+
+	if _, err := idx.Search(context.Background(), q); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	advance(clk, 15*time.Minute) // 15m into a still-live, untouched 30m TTL
+
+	if _, err := idx.Search(context.Background(), q); err != nil {
+		t.Fatalf("unclamped read: %v", err)
+	}
+	if c := inner.callCount(); c != 1 {
+		t.Fatalf("inner called %d times, want 1 (still a hit; tuning unchanged)", c)
+	}
+}
+
+// TestReadTimeTTLClampDoesNotResurrectOnRaisedTier proves a RAISED tier never
+// extends a stored entry past its own stored expiry: while still inside the
+// ORIGINAL window the surfaced expiry stays the entry's stored one (never
+// lengthened to reflect the raised tier), and once the clock passes that original
+// stored expiry the entry is a plain miss regardless of the raised tier.
+func TestReadTimeTTLClampDoesNotResurrectOnRaisedTier(t *testing.T) {
+	t.Parallel()
+	sc, instID, clk := testCache(t, keywordTTL, 0) // keyword tier = 30m
+	inner := &fakeInner{releases: clampFixtureReleases()}
+	idx := sc.probe(inner, instID, nil)
+	q := search.Query{Keywords: "clamp"}
+
+	primeCtx, primeInfo := core.WithCacheInfoSink(context.Background())
+	if _, err := idx.Search(primeCtx, q); err != nil {
+		t.Fatalf("prime: %v", err)
+	}
+
+	longer := 2 * time.Hour
+	if _, err := sc.UpdateConfig(context.Background(), CacheConfigPatch{KeywordTTL: &longer}); err != nil {
+		t.Fatalf("UpdateConfig: %v", err)
+	}
+
+	// Still inside the original 30m window: a hit, and its surfaced expiry must stay
+	// the entry's stored one — never extended to reflect the raised 2h tier.
+	advance(clk, 29*time.Minute)
+	hitCtx, hitInfo := core.WithCacheInfoSink(context.Background())
+	if _, err := idx.Search(hitCtx, q); err != nil {
+		t.Fatalf("hit inside original window: %v", err)
+	}
+	if c := inner.callCount(); c != 1 {
+		t.Fatalf("inner called %d times, want 1 (still a hit)", c)
+	}
+	if !hitInfo.ExpiresAt.Equal(primeInfo.ExpiresAt) {
+		t.Fatalf("hit expiry %v != original stored expiry %v; a raised tier must not extend it", hitInfo.ExpiresAt, primeInfo.ExpiresAt)
+	}
+
+	// Past the ORIGINAL stored expiry: still a miss, despite the raised tier.
+	advance(clk, 2*time.Minute) // 31m total past the prime
+	if _, err := idx.Search(context.Background(), q); err != nil {
+		t.Fatalf("read past original expiry: %v", err)
+	}
+	if c := inner.callCount(); c != 2 {
+		t.Fatalf("inner called %d times, want 2 (raised tier must not resurrect past the original expiry)", c)
 	}
 }
