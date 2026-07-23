@@ -656,6 +656,22 @@ func (r *Resolver) InvalidateAll() {
 	r.mu.Unlock()
 }
 
+// ForgetInstances runs the per-instance eviction fan-out (search-cache epoch bump,
+// cache counters, stats, budget) for each id — the same sequence Manager.Delete
+// performs for one deleted instance. It backs the backup-restore path, where EVERY
+// instance is wiped and re-inserted under a new id: the caller captures the
+// pre-import ids and forgets them all after the import commits, so no in-memory
+// state keyed by a dead — possibly recycled, SQLite reuses rowids — id survives the
+// restore, and no in-flight write-back from a pre-restore adapter can land under it.
+func (r *Resolver) ForgetInstances(ctx context.Context, ids ...int64) {
+	for _, id := range ids {
+		r.invalidateSearchCache(ctx, id)
+		r.forgetCacheCounters(id)
+		r.forgetStats(id)
+		r.forgetBudget(id)
+	}
+}
+
 // invalidateSearchCache purges the search-results cache entries for one instance
 // after a config mutation. It is nil-guarded (a no-op when caching is off) and
 // best-effort: a failed purge is logged (key/id only, never a payload) and never
