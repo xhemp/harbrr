@@ -17,7 +17,8 @@ import (
 // It snapshots builtEpoch at construction (matching indexerAdapter's build-time capture in
 // Registry.build), so the epoch timing the flightepoch/epoch_regression tests depend on is
 // preserved. It implements the FULL core.Indexer — forwarding every method,
-// including SupportsOffsetPaging, to inner — so the external handler tests can serve it.
+// including SupportsOffsetPaging and ConsumesSearchMode, to inner — so the external
+// handler tests can serve it.
 type cacheProbe struct {
 	inner      core.Indexer
 	cache      *SearchCache
@@ -49,6 +50,7 @@ func (p *cacheProbe) Capabilities() *mapper.Capabilities { return p.inner.Capabi
 func (p *cacheProbe) NeedsResolver() bool                { return p.inner.NeedsResolver() }
 func (p *cacheProbe) DownloadNeedsAuth() bool            { return p.inner.DownloadNeedsAuth() }
 func (p *cacheProbe) SupportsOffsetPaging() bool         { return p.inner.SupportsOffsetPaging() }
+func (p *cacheProbe) ConsumesSearchMode() bool           { return p.inner.ConsumesSearchMode() }
 
 func (p *cacheProbe) Grab(ctx context.Context, link string) (*search.GrabResult, error) {
 	return p.inner.Grab(ctx, link) //nolint:wrapcheck // fake-inner passthrough; nothing to add.

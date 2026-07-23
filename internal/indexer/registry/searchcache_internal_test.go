@@ -38,6 +38,7 @@ func (f *fakeInner) Capabilities() *mapper.Capabilities { return &mapper.Capabil
 func (f *fakeInner) NeedsResolver() bool                { return false }
 func (f *fakeInner) DownloadNeedsAuth() bool            { return false }
 func (f *fakeInner) SupportsOffsetPaging() bool         { return false }
+func (f *fakeInner) ConsumesSearchMode() bool           { return false }
 
 func (f *fakeInner) Grab(context.Context, string) (*search.GrabResult, error) {
 	return nil, errors.New("not implemented")

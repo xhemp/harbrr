@@ -21,7 +21,12 @@ const (
 	warmMaxInterval  = 120 * time.Minute
 
 	// warmIntervalSetting is the reserved per-instance setting name — a Go duration
-	// string like "15m", read exactly like "rate_interval"/"cache_ttl".
+	// string like "15m", read exactly like "rate_interval"/"cache_ttl". It also floors
+	// resolveTTL's rss/thin TTL (searchcache_ttl.go) so a warmed entry survives to the
+	// next warm. It has no effect on a paging or Mode-consuming instance: warmOne skips
+	// warming those outright (no single canonical RSS cache key exists to warm), so the
+	// setting only ever primes/floors an entry for a non-paging, non-Mode-consuming
+	// instance.
 	warmIntervalSetting = "rss_warm_interval"
 )
 
@@ -141,10 +146,23 @@ func warmPhase(instanceID int64, interval time.Duration) time.Duration {
 // retries within a tick, it just waits for the target's next scheduled warm. The
 // error is redacted before logging since a native driver's transport error can
 // embed a tracker URL (passkey included).
+//
+// A paging instance (SupportsOffsetPaging) or a Mode-consuming instance
+// (ConsumesSearchMode) is skipped outright, before ever touching the tracker: a
+// zero-query warm primes the cache key a paging/per-mode consumer never reads (a
+// paging driver keys per offset/limit window; a Mode-consuming driver keys per t=),
+// so the warm would just waste a request budget unit warming an entry nothing
+// serves from. See the warmIntervalSetting doc comment for the same limitation
+// documented from the operator side.
 func (w *Warmer) warmOne(ctx context.Context, slug string) {
 	idx, ok := w.resolve(ctx, slug)
 	if !ok {
 		w.log.Debug().Str("indexer", slug).Msg("registry: rss warm skipped: indexer unresolvable")
+		return
+	}
+	if idx.SupportsOffsetPaging() || idx.ConsumesSearchMode() {
+		w.log.Debug().Str("indexer", slug).
+			Msg("registry: rss warm skipped: paging/mode-consuming indexer has no single canonical cache key to warm")
 		return
 	}
 	if _, err := idx.Search(core.WithCacheBypass(ctx), search.Query{}); err != nil {
@@ -202,18 +220,26 @@ func warmInterval(settings []domain.IndexerSetting) (time.Duration, bool) {
 		if s.Name != warmIntervalSetting {
 			continue
 		}
-		d, err := time.ParseDuration(s.Value)
-		if err != nil || d <= 0 {
-			return 0, false
-		}
-		switch {
-		case d < warmMinInterval:
-			return warmMinInterval, true
-		case d > warmMaxInterval:
-			return warmMaxInterval, true
-		default:
-			return d, true
-		}
+		return warmIntervalFromValue(s.Value)
 	}
 	return 0, false
+}
+
+// warmIntervalFromValue is warmInterval's parse+clamp core, extracted so
+// resolveTTL (searchcache_ttl.go) can apply the SAME clamp to a raw "rss_warm_interval"
+// cfg value without re-deriving the [warmMinInterval, warmMaxInterval] rule. Absent
+// (empty string), unparseable, or non-positive is disabled (ok=false).
+func warmIntervalFromValue(raw string) (time.Duration, bool) {
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	switch {
+	case d < warmMinInterval:
+		return warmMinInterval, true
+	case d > warmMaxInterval:
+		return warmMaxInterval, true
+	default:
+		return d, true
+	}
 }

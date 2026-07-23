@@ -58,6 +58,25 @@ func TestResolveTTL(t *testing.T) {
 		{name: "override clamped by thin", setting: map[string]string{"cache_ttl": "1h"}, q: kwQ, count: 2, want: 2 * time.Minute},
 		// A short override below thin stays (clamp only shortens, override already shorter).
 		{name: "short override below thin not lengthened", setting: map[string]string{"cache_ttl": "30s"}, q: kwQ, count: 2, want: 30 * time.Second},
+
+		// warmFloor (#341): an empty query with a valid rss_warm_interval floors the
+		// rss-tier TTL up to the clamped interval (5m rss base < 15m warm interval).
+		{name: "empty query floored to warm interval", setting: map[string]string{"rss_warm_interval": "15m"}, q: emptyQ, count: 100, want: 15 * time.Minute},
+		// A keyword query is never floored, even with a valid warm interval configured.
+		{name: "keyword query unaffected by warm interval", setting: map[string]string{"rss_warm_interval": "15m"}, q: kwQ, count: 100, want: 30 * time.Minute},
+		// Invalid/absent warm interval settings are no-ops.
+		{name: "invalid warm interval unaffected", setting: map[string]string{"rss_warm_interval": "nope"}, q: emptyQ, count: 100, want: 5 * time.Minute},
+		{name: "absent warm interval unaffected", q: emptyQ, count: 100, want: 5 * time.Minute},
+		// The floor clamps the raw setting into [warmMinInterval, warmMaxInterval]
+		// (10m,120m) exactly like warmInterval does, before flooring.
+		{name: "warm interval below floor clamps up then floors", setting: map[string]string{"rss_warm_interval": "1m"}, q: emptyQ, count: 100, want: warmMinInterval},
+		// An explicit cache_ttl longer than the warm interval is never shortened by
+		// the floor — the floor only raises.
+		{name: "explicit longer cache_ttl not shortened by floor", setting: map[string]string{"cache_ttl": "1h", "rss_warm_interval": "15m"}, q: emptyQ, count: 100, want: time.Hour},
+		// A thin empty-query result is still floored to the warm interval AFTER the
+		// thin clamp shortens it — the floor runs last and can re-raise a thin-clamped
+		// rss base past the warm interval.
+		{name: "thin empty query still floored to warm interval", setting: map[string]string{"rss_warm_interval": "15m"}, q: emptyQ, count: 1, want: 15 * time.Minute},
 	}
 
 	for _, tt := range tests {

@@ -260,16 +260,21 @@ func TestWarmerSchedule(t *testing.T) {
 }
 
 // fakeWarmIndexer is a minimal core.Indexer double for warmOne: only Search is
-// exercised, so every other method is a fixed stub.
+// exercised, so every other method is a fixed stub. pages/consumesMode drive the
+// paging/Mode-consuming pre-Search skip (SupportsOffsetPaging/ConsumesSearchMode);
+// both default false (zero value), matching every existing table case.
 type fakeWarmIndexer struct {
-	searchFn func(ctx context.Context, q search.Query) ([]*normalizer.Release, error)
+	searchFn     func(ctx context.Context, q search.Query) ([]*normalizer.Release, error)
+	pages        bool
+	consumesMode bool
 }
 
 func (f *fakeWarmIndexer) Info() core.IndexerInfo             { return core.IndexerInfo{ID: "fake"} }
 func (f *fakeWarmIndexer) Capabilities() *mapper.Capabilities { return &mapper.Capabilities{} }
 func (f *fakeWarmIndexer) NeedsResolver() bool                { return false }
 func (f *fakeWarmIndexer) DownloadNeedsAuth() bool            { return false }
-func (f *fakeWarmIndexer) SupportsOffsetPaging() bool         { return false }
+func (f *fakeWarmIndexer) SupportsOffsetPaging() bool         { return f.pages }
+func (f *fakeWarmIndexer) ConsumesSearchMode() bool           { return f.consumesMode }
 
 func (f *fakeWarmIndexer) Grab(context.Context, string) (*search.GrabResult, error) {
 	return &search.GrabResult{}, nil
@@ -280,18 +285,24 @@ func (f *fakeWarmIndexer) Search(ctx context.Context, q search.Query) ([]*normal
 }
 
 // TestWarmerWarmOne covers warmOne's skip/success matrix: a disabled/unresolvable
-// instance never calls Search; a budget-exhausted, circuit-open, or transport
-// error is a swallowed skip (no panic); a success calls Search exactly once with
-// CacheBypass set and an empty query, matching the served RSS path.
+// instance never calls Search; a paging or Mode-consuming instance is skipped before
+// Search is ever called (no single canonical cache key to warm); a budget-exhausted,
+// circuit-open, or transport error is a swallowed skip (no panic); a success calls
+// Search exactly once with CacheBypass set and an empty query, matching the served
+// RSS path.
 func TestWarmerWarmOne(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		resolveOK  bool
-		searchErr  error
-		wantCalled bool
+		name         string
+		resolveOK    bool
+		pages        bool
+		consumesMode bool
+		searchErr    error
+		wantCalled   bool
 	}{
 		{name: "disabled or unresolvable instance", resolveOK: false, wantCalled: false},
+		{name: "paging instance skipped", resolveOK: true, pages: true, wantCalled: false},
+		{name: "mode-consuming instance skipped", resolveOK: true, consumesMode: true, wantCalled: false},
 		{name: "budget exhausted", resolveOK: true, searchErr: errBudgetExhausted, wantCalled: true},
 		{name: "circuit open", resolveOK: true, searchErr: errCircuitOpen, wantCalled: true},
 		{name: "transport error", resolveOK: true, searchErr: errors.New("registry: search \"fake\": connection refused"), wantCalled: true},
@@ -305,12 +316,16 @@ func TestWarmerWarmOne(t *testing.T) {
 				gotBypass bool
 				gotEmpty  bool
 			)
-			idx := &fakeWarmIndexer{searchFn: func(ctx context.Context, q search.Query) ([]*normalizer.Release, error) {
-				called = true
-				gotBypass = core.CacheBypass(ctx)
-				gotEmpty = isEmptyQuery(q)
-				return nil, tt.searchErr
-			}}
+			idx := &fakeWarmIndexer{
+				pages:        tt.pages,
+				consumesMode: tt.consumesMode,
+				searchFn: func(ctx context.Context, q search.Query) ([]*normalizer.Release, error) {
+					called = true
+					gotBypass = core.CacheBypass(ctx)
+					gotEmpty = isEmptyQuery(q)
+					return nil, tt.searchErr
+				},
+			}
 			w := &Warmer{
 				resolve: func(context.Context, string) (core.Indexer, bool) {
 					if !tt.resolveOK {
