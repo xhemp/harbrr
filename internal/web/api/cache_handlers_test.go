@@ -296,10 +296,19 @@ func TestCacheStatsHappyPath(t *testing.T) {
 	if err := json.Unmarshal(body, &top); err != nil {
 		t.Fatalf("decode stats object: %v", err)
 	}
-	for _, key := range []string{"hits", "misses"} {
+	for _, key := range []string{"hits", "misses", "trackerHitsSaved"} {
 		if _, ok := top[key]; !ok {
 			t.Errorf("stats JSON missing top-level %q key: %s", key, body)
 		}
+	}
+	// Same wiring guard for the per-indexer row: its hitsSaved is asserted as 0 above,
+	// which would also pass if the key were dropped entirely.
+	var rows []map[string]json.RawMessage
+	if err := json.Unmarshal(top["byIndexer"], &rows); err != nil || len(rows) != 1 {
+		t.Fatalf("decode byIndexer rows: %v (rows=%d)", err, len(rows))
+	}
+	if _, ok := rows[0]["hitsSaved"]; !ok {
+		t.Errorf("byIndexer[0] JSON missing %q key: %s", "hitsSaved", body)
 	}
 }
 
