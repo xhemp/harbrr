@@ -220,6 +220,13 @@ func TestCacheStatsHappyPath(t *testing.T) {
 
 	instanceID := addTestIndexer(t, e, base, c, "tt")
 	seedCacheEntry(t, e.db, instanceID, now)
+	// Give the seeded ROW a nonzero hit_count so the row-derived totalHits (5) and the
+	// cumulative hits counter (0 — no hit was ever served through the cache) DIFFER:
+	// the trackerHitsSaved assertions below can then tell the cumulative mapping apart
+	// from the old row-derived one, which would report 5 here.
+	if err := (database.SearchCacheStore{}).BumpHits(context.Background(), e.db, "test-cache-key-0000", 5, now); err != nil {
+		t.Fatalf("bump seeded hit_count: %v", err)
+	}
 
 	resp, body := do(t, c, http.MethodGet, base+"/api/cache/stats", nil, nil)
 	mustStatus(t, resp, body, http.StatusOK)
@@ -254,9 +261,19 @@ func TestCacheStatsHappyPath(t *testing.T) {
 	if idx.BreakerOpenUntil != nil {
 		t.Errorf("byIndexer[0].breakerOpenUntil = %v, want null", idx.BreakerOpenUntil)
 	}
-	// trackerHitsSaved mirrors the cumulative hits counter (no hits served yet -> 0).
-	if stats.TrackerHitsSaved != stats.Hits {
-		t.Errorf("trackerHitsSaved = %d, want == hits %d", stats.TrackerHitsSaved, stats.Hits)
+	// The seeded row carries hit_count=5 while no hit was ever served through the
+	// cache, so the row-derived and cumulative figures DIFFER here — these assertions
+	// distinguish the cumulative mapping from the old row-derived one (which would
+	// report trackerHitsSaved=5).
+	if stats.TotalHits != 5 {
+		t.Errorf("totalHits = %d, want 5 (row-derived SUM of seeded hit_count)", stats.TotalHits)
+	}
+	if stats.TrackerHitsSaved != 0 || stats.TrackerHitsSaved != stats.Hits {
+		t.Errorf("trackerHitsSaved = %d, want 0 == hits %d (cumulative, not the row-derived 5)",
+			stats.TrackerHitsSaved, stats.Hits)
+	}
+	if idx.HitsSaved != 0 {
+		t.Errorf("byIndexer[0].hitsSaved = %d, want 0 (cumulative, not the row-derived 5)", idx.HitsSaved)
 	}
 	// The global hits/misses are the aggregate of the per-indexer rows (the global view
 	// the per-tracker breakdown was missing): summing byIndexer must reproduce them.

@@ -12,9 +12,9 @@ import (
 )
 
 // cacheStatsResponse is the management view of the search-results cache. hitRatio
-// (and its underlying hits/misses/trackerHitsSaved) is a cumulative counter
-// persisted across restarts (see registry/searchcache_counters.go); totalHits is
-// the durable row-derived figure and — unlike the cumulative counters — SHRINKS
+// is derived from the cumulative hits and misses counters, which are persisted
+// across restarts (see registry/searchcache_counters.go); trackerHitsSaved mirrors
+// hits. totalHits is the durable row-derived figure and — unlike the cumulative counters — SHRINKS
 // whenever its backing rows are reaped (cleanup, flush, or an instance
 // invalidation), since it is a live SUM over rows currently in the store.
 type cacheStatsResponse struct {
