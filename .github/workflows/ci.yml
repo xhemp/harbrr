@@ -668,7 +668,7 @@ jobs:
       # Push to GHCR on a same-repo PR (testable before merge), main (develop tag),
       # or a version tag (release, whether that tag arrived via push or a manual
       # dispatch aimed at the tag).
-      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/')) }}
+      PUSH: ${{ true }}
     steps:
       # The job pushes to a registry (packages: write) and runs no git operations after
       # checkout, so don't persist the token in the git config (smaller blast radius).
