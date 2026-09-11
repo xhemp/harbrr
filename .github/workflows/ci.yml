@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 env:
-  # A stalled cache-blob download (0 MB/s mid-transfer, seen from the self-hosted
+  # A stalled cache-blob download (0 MB/s mid-transfer, seen from the ubuntu-22.04
   # fleet) otherwise hangs for actions/cache's default 10-minute segment timeout
   # before falling back to a miss. Give up after 2 and take the miss.
   SEGMENT_DOWNLOAD_TIMEOUT_MINS: "2"
@@ -47,7 +47,7 @@ jobs:
   guards:
     name: guards
     if: github.event_name == 'pull_request'
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -190,7 +190,7 @@ jobs:
   # Cross-build below covers other platforms and vet is covered by golangci-lint (govet).
   backend-test:
     name: backend-test (${{ matrix.shard.name }})
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     # Match the Dockerfile's build stage (golang:1.27-alpine) so the toolchain that
     # tests is the image's own musl Go — hence no actions/setup-go here (it would
     # download a glibc Go and shadow the image's on PATH, silently defeating the
@@ -213,7 +213,7 @@ jobs:
       # and GOTOOLCHAIN=local below makes `go list -m` refuse to run at all if the
       # container's Go is older than go.mod asks for.
       image: golang:1.27.0-alpine
-      # Persistent host-disk Go caches instead of actions/cache: the self-hosted
+      # Persistent host-disk Go caches instead of actions/cache: the ubuntu-22.04
       # fleet shares one host, so round-tripping ~2GB of cache blobs through GHA
       # storage cost ~40s of restore per shard (plus the stalled-segment-download
       # failure mode) to land bytes on a disk they never left. The module cache is
@@ -311,7 +311,7 @@ jobs:
   # slower in wall time (this chain sits well off the run's critical path).
   web-checks:
     name: web-checks
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     container:
       image: oven/bun:1.4.0-alpine
       # Host-disk bun package cache, shared by every frontend job (concurrent
@@ -353,7 +353,7 @@ jobs:
   # rebuilding, so all shipped binaries embed the identical bundle.
   web:
     name: web
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     container:
       image: oven/bun:1.4.0-alpine
       # Host-disk bun cache — see web-checks. This job heads the run's critical
@@ -466,7 +466,7 @@ jobs:
   # multi-arch index digest — re-resolve the digest whenever the tag moves.
   web-e2e:
     name: web-e2e
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
       # Host-disk Go caches, same rationale as backend-test: this job sits on the
@@ -531,7 +531,7 @@ jobs:
 
   golangci-lint:
     name: golangci-lint
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     # Host job, not a container: linting has no permission-gated tests (unlike
     # backend-test, which needs a non-root user), and the product binary is
     # CGO_ENABLED=0, so nothing it lints links libc — the musl toolchain the Alpine
@@ -552,7 +552,7 @@ jobs:
           # Single source of truth (autobrr/qui's pattern): setup-go reads the
           # version straight from go.mod, so a bump there needs no CI edit.
           go-version-file: go.mod
-          # Host job on the shared persistent self-hosted fleet: GOMODCACHE/GOCACHE
+          # Host job on the shared persistent ubuntu-22.04 fleet: GOMODCACHE/GOCACHE
           # already persist in /root between runs, so a GHA cache round-trip is pure
           # overhead. Container jobs that need caching (backend-test) use actions/cache.
           cache: false
@@ -587,7 +587,7 @@ jobs:
   # on org repos. check-no-secrets.sh is a targeted tracker-credential backstop.
   secret-scan:
     name: secret scan
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -611,7 +611,7 @@ jobs:
   # vulnerability DB is fetched fresh each run.
   govulncheck:
     name: govulncheck
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
       GOVULNCHECK_VERSION: v1.7.0
@@ -622,7 +622,7 @@ jobs:
           # Single source of truth (autobrr/qui's pattern): setup-go reads the
           # version straight from go.mod, so a bump there needs no CI edit.
           go-version-file: go.mod
-          # Host job on the shared persistent self-hosted fleet: GOMODCACHE/GOCACHE
+          # Host job on the shared persistent ubuntu-22.04 fleet: GOMODCACHE/GOCACHE
           # already persist in /root between runs, so a GHA cache round-trip is pure
           # overhead. Container jobs that need caching (backend-test) use actions/cache.
           cache: false
@@ -649,7 +649,7 @@ jobs:
     # Do not add a custom name: it would change the check name and the branch's
     # required checks would wait forever on a context that no longer reports.
     name: cross-build
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     needs: [web]
     strategy:
@@ -672,7 +672,7 @@ jobs:
           # Single source of truth (autobrr/qui's pattern): setup-go reads the
           # version straight from go.mod, so a bump there needs no CI edit.
           go-version-file: go.mod
-          # Host job on the shared persistent self-hosted fleet: GOMODCACHE/GOCACHE
+          # Host job on the shared persistent ubuntu-22.04 fleet: GOMODCACHE/GOCACHE
           # already persist in /root between runs, so a GHA cache round-trip is pure
           # overhead. Container jobs that need caching (backend-test) use actions/cache.
           cache: false
@@ -711,7 +711,7 @@ jobs:
   # then assembles the pullable multi-arch manifest.
   docker:
     name: docker (${{ matrix.arch }})
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     needs: [web]
     permissions:
@@ -741,7 +741,7 @@ jobs:
           # Single source of truth (autobrr/qui's pattern): setup-go reads the
           # version straight from go.mod, so a bump there needs no CI edit.
           go-version-file: go.mod
-          # Host job on the shared persistent self-hosted fleet: GOMODCACHE/GOCACHE
+          # Host job on the shared persistent ubuntu-22.04 fleet: GOMODCACHE/GOCACHE
           # already persist in /root between runs, so a GHA cache round-trip is pure
           # overhead. Container jobs that need caching (backend-test) use actions/cache.
           cache: false
@@ -863,7 +863,7 @@ jobs:
   # publish waits on the gate.
   docker-merge:
     name: docker-merge
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     needs: [docker, backend-test, web-checks, web-e2e, golangci-lint]
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
@@ -940,7 +940,7 @@ jobs:
   # The release job below keeps the full gate, which is where it actually matters.
   goreleaser-check:
     name: goreleaser check
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     steps:
@@ -966,7 +966,7 @@ jobs:
   # once, so the conditionals inside are gone.
   goreleaser:
     name: goreleaser
-    runs-on: self-hosted
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs: [backend-test, web-checks, web-e2e, golangci-lint, web]
@@ -981,7 +981,7 @@ jobs:
           # Single source of truth (autobrr/qui's pattern): setup-go reads the
           # version straight from go.mod, so a bump there needs no CI edit.
           go-version-file: go.mod
-          # Host job on the shared persistent self-hosted fleet: GOMODCACHE/GOCACHE
+          # Host job on the shared persistent ubuntu-22.04 fleet: GOMODCACHE/GOCACHE
           # already persist in /root between runs, so a GHA cache round-trip is pure
           # overhead. Container jobs that need caching (backend-test) use actions/cache.
           cache: false
