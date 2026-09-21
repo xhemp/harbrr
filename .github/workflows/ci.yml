@@ -560,7 +560,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         env:
           # Changed to a writable directory in the workspace to prevent permission issues
-          GOLANGCI_LINT_CACHE: ${{ github.workspace }}.cache/golangci-lint
+          GOLANGCI_LINT_CACHE: ${{ github.workspace }}/.cache/golangci-lint
         with:
           # Pin the version so it matches the version in `make tools`.
           version: v2.13.2
@@ -716,7 +716,7 @@ jobs:
       # Push to GHCR on a same-repo PR (testable before merge), main (develop tag),
       # or a version tag (release, whether that tag arrived via push or a manual
       # dispatch aimed at the tag).
-      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') or (github.event_name == 'push' and github.ref == 'refs/heads/main') or ((github.event_name == 'push' or github.event_name == 'workflow_dispatch') and startsWith(github.ref, 'refs/tags/')) }}
+      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/')) }}
     steps:
       # The job pushes to a registry (packages: write) and runs no git operations after
       # checkout, so don't persist the token in the git config (smaller blast radius).
@@ -804,7 +804,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: |
-            ${{ env.PUSH == 'true' and format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) or '' }}${{ matrix.load and 'type=docker' or '' }}
+            ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) \vert{}\vert{} '' }}${{ matrix.load && 'type=docker' || '' }}
           # No buildx GHA cache: in CI the compile runs in the prior `go build` step and is
           # injected via build-contexts, so buildx only COPYs the binary and rebuilds the tiny
           # native certs stage (seconds). type=gha,mode=max re-uploaded those layers for no
@@ -836,7 +836,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: cleanup local smoke image
-        if: ${{ always() and matrix.arch == 'amd64' }}
+        if: ${{ always() && matrix.arch == 'amd64' }}
         env:
           IMAGEID: ${{ steps.build.outputs.imageid }}
         run: |
@@ -853,9 +853,9 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [docker, backend-test, web-checks, web-e2e, golangci-lint]
     if: >-
-      (github.event_name == 'pull_request' and github.event.pull_request.head.repo.full_name == github.repository and github.actor != 'dependabot[bot]') or
-      (github.event_name == 'push' and github.ref == 'refs/heads/main') or
-      ((github.event_name == 'push' or github.event_name == 'workflow_dispatch') and startsWith(github.ref, 'refs/tags/'))
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
       packages: write
@@ -888,7 +888,7 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=pr
-            type=raw,value=develop,enable=${{ github.event_name == 'push' and github.ref == 'refs/heads/main' }}
+            type=raw,value=develop,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
@@ -899,7 +899,7 @@ jobs:
           # events are already tag-filtered to v*, but a workflow_dispatch can aim at
           # ANY tag, and a stray non-release tag must not overwrite `latest`.
           flavor: |
-            latest=${{ (github.event_name == 'push' or github.event_name == 'workflow_dispatch') and startsWith(github.ref, 'refs/tags/v') }}
+            latest=${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') }}
       - name: create manifest list and push
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
