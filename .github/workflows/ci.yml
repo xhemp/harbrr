@@ -713,11 +713,17 @@ jobs:
           - { arch: arm64, load: false }
     env:
       IMAGE: ghcr.io/${{ github.repository }}
-      # Push to GHCR on a same-repo PR (testable before merge), main (develop tag),
-      # or a version tag (release, whether that tag arrived via push or a manual
-      # dispatch aimed at the tag).
-      PUSH: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/')) }}
     steps:
+      - name: determine push condition
+        id: push_check
+        run: |
+          PUSH="false"
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ] && [ "${{ github.actor }}" != "dependabot[bot]" ]; then PUSH="true"; fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then PUSH="true"; fi
+          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then PUSH="true"; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then PUSH="true"; fi
+          echo "PUSH=$PUSH" >> "$GITHUB_ENV"
+          
       # The job pushes to a registry (packages: write) and runs no git operations after
       # checkout, so don't persist the token in the git config (smaller blast radius).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -784,6 +790,18 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
 
+      - name: set build outputs
+        id: build_out
+        run: |
+          echo "exporters<<EOF" >> "$GITHUB_OUTPUT"
+          if [ "${PUSH}" = "true" ]; then
+            echo "type=image,name=${IMAGE},push-by-digest=true,name-canonical=true,push=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ matrix.load }}" = "true" ]; then
+            echo "type=docker" >> "$GITHUB_OUTPUT"
+          fi
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       # ONE buildx invocation per arch (this job sits on the run's critical path, and
       # the old build-for-smoke + rebuild-for-push pair cost ~15s of duplicate drive)
       # with up to two exporters: push-by-digest on a publishing run — anonymous,
@@ -803,8 +821,7 @@ jobs:
             build=${{ runner.temp }}/binctx-${{ matrix.arch }}
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: |
-            ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) \vert{}\vert{} '' }}${{ matrix.load && 'type=docker' || '' }}
+          outputs: ${{ steps.build_out.outputs.exporters }}
           # No buildx GHA cache: in CI the compile runs in the prior `go build` step and is
           # injected via build-contexts, so buildx only COPYs the binary and rebuilds the tiny
           # native certs stage (seconds). type=gha,mode=max re-uploaded those layers for no
@@ -840,7 +857,7 @@ jobs:
         env:
           IMAGEID: ${{ steps.build.outputs.imageid }}
         run: |
-          [ -n "$IMAGEID" ] && docker rmi -f "$IMAGEID" 2>/dev/null || true
+          if [ -n "$IMAGEID" ]; then docker rmi -f "$IMAGEID" 2>/dev/null; fi || echo ""
 
   # Assemble the multi-arch manifest from the per-arch digests — the pullable publish
   # step. Only runs when the docker job pushed (same-repo PR or tag); it builds nothing,
@@ -855,7 +872,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/'))
+      (contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/'))
     permissions:
       contents: read
       packages: write
@@ -899,7 +916,7 @@ jobs:
           # events are already tag-filtered to v*, but a workflow_dispatch can aim at
           # ANY tag, and a stray non-release tag must not overwrite `latest`.
           flavor: |
-            latest=${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && startsWith(github.ref, 'refs/tags/v') }}
+            latest=${{ contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/v') }}
       - name: create manifest list and push
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
