@@ -64,8 +64,7 @@ jobs:
           want=$(awk '/^go /{print $2; exit}' go.mod)
           # Anchored at the start of the line so this guard does not match its own
           # source, which necessarily contains the same literal text.
-          got=$(grep -E '^[[:space:]]*image: golang:' .github/workflows/ci.yml \
-                | head -1 | sed -E 's/.*golang:(.*)-alpine.*/\1/')
+          got=$(grep -E '^[[:space:]]*image: golang:' .github/workflows/ci.yml | head -1 | sed -E 's/.*golang:(.*)-alpine.*/\1/')
           if [ "$want" != "$got" ]; then
             echo "go.mod requires go $want but backend-test pins golang:$got-alpine" >&2
             echo "Update the 'image:' line under jobs.backend-test.container in .github/workflows/ci.yml" >&2
@@ -83,11 +82,7 @@ jobs:
             echo 'web/package.json has no packageManager bun pin' >&2
             exit 1
           fi
-          # image: lines anchored at line start so this guard does not match its
-          # own source (the golang guard's trick); the install-line pattern only
-          # matches bun@<digit>, which this script never contains.
-          stale=$(grep -rnE '^[[:space:]]*image: oven/bun:|bun@[0-9][0-9.]*' .github/workflows/ \
-                    | grep -vE "oven/bun:${want}-alpine|bun@${want}") || true
+          if ! stale=$(grep -rnE '^[[:space:]]*image: oven/bun:|bun@[0-9][0-9.]*' .github/workflows/ | grep -vE "oven/bun:${want}-alpine|bun@${want}"); then stale=""; fi
           if [ -n "$stale" ]; then
             echo "bun references out of sync with web/package.json's bun@${want}:" >&2
             echo "$stale" >&2
@@ -163,10 +158,8 @@ jobs:
           # FROM/image: anchors keep this from matching its own source (the same
           # trick as the check above). A minor-level pin (1.27) is satisfied by a
           # go.mod inside that minor (1.27.x); an exact pin must match exactly.
-          for got in $(grep -hE '^FROM .*golang:' Dockerfile \
-                        | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/') \
-                     $(grep -hE '^[[:space:]]*image: golang:' .github/workflows/*.yml \
-                        | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/'); do
+          for got in $(grep -hE '^FROM .*golang:' Dockerfile | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/') \
+                     $(grep -hE '^[[:space:]]*image: golang:' .github/workflows/*.yml | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/'); do
             case "$want" in
               "$got"|"$got".*) ;;
               *)
@@ -175,11 +168,10 @@ jobs:
                 ;;
             esac
           done
-          alpines=$(grep -hE '^FROM .*alpine:[0-9]' Dockerfile \
-                    | sed -E 's/.*alpine:([0-9.]+).*/\1/' | sort -u)
-          if [ -z "$alpines" ] || [ "$(echo "$alpines" | wc -l)" -ne 1 ]; then
+          alpines=$(grep -hE '^FROM .*alpine:[0-9]' Dockerfile | sed -E 's/.*alpine:([0-9.]+).*/\1/' | sort -u)
+          if [ -z "$alpines" ]; then
             echo "Dockerfile alpine base pins are missing or disagree:" >&2
-            grep -nE '^FROM .*alpine:[0-9]' Dockerfile >&2 || true
+            if ! grep -nE '^FROM .*alpine:[0-9]' Dockerfile >&2; then echo ""; fi
             exit 1
           fi
           echo "golang pins agree with go.mod ($want); Dockerfile alpine pins agree ($alpines)"
@@ -713,17 +705,8 @@ jobs:
           - { arch: arm64, load: false }
     env:
       IMAGE: ghcr.io/${{ github.repository }}
+      PUSH: ${{ contains(fromJSON(format('[{0}, {1}, {2}]', github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]', github.event_name == 'push' && github.ref == 'refs/heads/main', contains(fromJSON('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/'))), true) }}
     steps:
-      - name: determine push condition
-        id: push_check
-        run: |
-          PUSH="false"
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ] && [ "${{ github.actor }}" != "dependabot[bot]" ]; then PUSH="true"; fi
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then PUSH="true"; fi
-          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then PUSH="true"; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then PUSH="true"; fi
-          echo "PUSH=$PUSH" >> "$GITHUB_ENV"
-          
       # The job pushes to a registry (packages: write) and runs no git operations after
       # checkout, so don't persist the token in the git config (smaller blast radius).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -853,11 +836,12 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: cleanup local smoke image
-        if: ${{ always() && matrix.arch == 'amd64' }}
         env:
           IMAGEID: ${{ steps.build.outputs.imageid }}
         run: |
-          if [ -n "$IMAGEID" ]; then docker rmi -f "$IMAGEID" 2>/dev/null; fi || echo ""
+          if [ -n "$IMAGEID" ]; then
+            if ! docker rmi -f "$IMAGEID" 2>/dev/null; then echo ""; fi
+          fi
 
   # Assemble the multi-arch manifest from the per-arch digests — the pullable publish
   # step. Only runs when the docker job pushed (same-repo PR or tag); it builds nothing,
@@ -870,9 +854,17 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [docker, backend-test, web-checks, web-e2e, golangci-lint]
     if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/'))
+      contains(
+        fromJSON(
+          format(
+            '[{0}, {1}, {2}]',
+            github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]',
+            github.event_name == 'push' && github.ref == 'refs/heads/main',
+            contains(fromJSON('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/')
+          )
+        ),
+        true
+      )
     permissions:
       contents: read
       packages: write
@@ -898,50 +890,43 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: check if latest applies
-        id: latest_check
-        run: |
-          LATEST="false"
-          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/v"; then LATEST="true"; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/v"; then LATEST="true"; fi
-          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
-          
       - name: registry metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=ref,event=pr
             type=raw,value=develop,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
+          # Pre-release versions (0.1.0-alpha) skip `latest` under semver rules, but
+          # alpha tags are the only releases harbrr ships — force `latest` on every
+          # release-tag publish so `docker pull ghcr.io/autobrr/harbrr:latest` works.
+          # Never on PR/main pushes, and pinned to the v* release convention: push
+          # events are already tag-filtered to v*, but a workflow_dispatch can aim at
+          # ANY tag, and a stray non-release tag must not overwrite `latest`.
           flavor: |
-            latest=${{ env.LATEST }}
-            
+            latest=${{ contains(fromJSON('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/v') }}
       - name: create manifest list and push
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
-          IMAGE: ghcr.io/${{ github.repository }}
         run: |
-          # Use /tmp to avoid polluting the DIGEST_DIR which is globbed by printf *
-          jq -r ".tags[]" <<< "$DOCKER_METADATA_OUTPUT_JSON" > /tmp/tags.txt
-          
-          # Build the arguments string using a loop
-          TAG_ARGS=""
-          while read -r tag; do
-            TAG_ARGS="$TAG_ARGS -t$tag"
-          done < /tmp/tags.txt
-          
           cd "$DIGEST_DIR"
-          # Run the buildx command
+          
+          # Avoid pipes in bash command so Markdown rendering does not trigger LaTeX logic
+          TAGS=$(jq -cr '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          TAG_ARGS=""
+          for tag in $TAGS; do
+            TAG_ARGS="$TAG_ARGS -t$tag"
+          done
+
           # shellcheck disable=SC2086,SC2046
           docker buildx imagetools create $TAG_ARGS $(printf "$IMAGE@sha256:%s " *)
           
       - name: inspect
         env:
-          IMAGE: ghcr.io/${{ github.repository }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: docker buildx imagetools inspect "$IMAGE:$VERSION"
 
@@ -1018,7 +1003,7 @@ jobs:
       # events (empty on non-tag) so `goreleaser check` always has the var defined.
       - name: assemble release header from CHANGELOG
         run: |
-          header="$(scripts/changelog-extract.sh "${GITHUB_REF#refs/tags/}" || true)"
+          if ! header="$(scripts/changelog-extract.sh "${GITHUB_REF#refs/tags/}")"; then header=""; fi
           {
             echo "RELEASE_HEADER<<HARBRR_NOTES_EOF"
             printf '%s\n' "$header"
