@@ -87,7 +87,7 @@ jobs:
           # own source (the golang guard's trick); the install-line pattern only
           # matches bun@<digit>, which this script never contains.
           stale=$(grep -rnE '^[[:space:]]*image: oven/bun:|bun@[0-9][0-9.]*' .github/workflows/ \
-                  | grep -vE "oven/bun:${want}-alpine|bun@${want}") || true
+                    | grep -vE "oven/bun:${want}-alpine|bun@${want}") || true
           if [ -n "$stale" ]; then
             echo "bun references out of sync with web/package.json's bun@${want}:" >&2
             echo "$stale" >&2
@@ -164,9 +164,9 @@ jobs:
           # trick as the check above). A minor-level pin (1.27) is satisfied by a
           # go.mod inside that minor (1.27.x); an exact pin must match exactly.
           for got in $(grep -hE '^FROM .*golang:' Dockerfile \
-                       | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/') \
+                        | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/') \
                      $(grep -hE '^[[:space:]]*image: golang:' .github/workflows/*.yml \
-                       | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/'); do
+                        | sed -E 's/.*golang:([0-9.]+)-alpine.*/\1/'); do
             case "$want" in
               "$got"|"$got".*) ;;
               *)
@@ -559,25 +559,13 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         env:
-          # Same reasoning as setup-go's `cache: false` directly above, applied to
-          # the analysis cache the action manages for itself. Measured on
-          # dba00e5: restoring it took 44.5s and saving it 10.1s, wrapping a lint
-          # that itself ran in 24.5s — the payload is only ~20MB but tens of
-          # thousands of tiny files, so `tar -x` is syscall-bound, and `-P` unpacks
-          # them onto the runner's root filesystem rather than the optane volume
-          # every other cache here lives on.
-          #
-          # Point the cache at that volume instead and let it persist. It is shared
-          # by the whole fleet, so it stays warm no matter which runner picks the
-          # job up — strictly better than a per-run tarball, which is cold whenever
-          # the key moves (a version bump cost 144s and 164s on the two runs after
-          # it).
-          GOLANGCI_LINT_CACHE: /mnt/optane/github-actions/harbrr-golangci-cache
+          # Changed to a writable directory in the workspace to prevent permission issues
+          GOLANGCI_LINT_CACHE: ${{ github.workspace }}/.cache/golangci-lint
         with:
           # Pin the version so it matches the version in `make tools`.
           version: v2.13.2
           only-new-issues: ${{ github.event_name == 'pull_request' }}
-          # The cache lives on host disk now; the action's own save/restore would
+          # The cache lives on local disk now; the action's own save/restore would
           # both miss the path above and re-add the tar cost it is meant to avoid.
           skip-cache: true
           skip-save-cache: true
@@ -816,8 +804,7 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: |
-            ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || '' }}
-            ${{ matrix.load && 'type=docker' || '' }}
+            ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) \vert{}\vert{} '' }}${{ matrix.load && 'type=docker' || '' }}
           # No buildx GHA cache: in CI the compile runs in the prior `go build` step and is
           # injected via build-contexts, so buildx only COPYs the binary and rebuilds the tiny
           # native certs stage (seconds). type=gha,mode=max re-uploaded those layers for no
@@ -922,7 +909,7 @@ jobs:
           # ref per digest file (the standard buildx imagetools manifest-merge idiom).
           # IMAGE / DOCKER_METADATA_OUTPUT_JSON come from env, not template interpolation.
           # shellcheck disable=SC2046
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+          docker buildx imagetools create $(jq -cr '.tags \vert{} map("-t " + .) \vert{} join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf "$IMAGE@sha256:%s " *)
       - name: inspect
         env:
