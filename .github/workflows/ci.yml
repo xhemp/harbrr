@@ -803,7 +803,7 @@ jobs:
             build=${{ runner.temp }}/binctx-${{ matrix.arch }}
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: |-
+          outputs: |
             ${{ env.PUSH == 'true' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) \vert{}\vert{} '' }}${{ matrix.load && 'type=docker' || '' }}
           # No buildx GHA cache: in CI the compile runs in the prior `go build` step and is
           # injected via build-contexts, so buildx only COPYs the binary and rebuilds the tiny
