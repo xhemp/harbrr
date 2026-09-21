@@ -869,16 +869,17 @@ jobs:
     name: docker-merge
     runs-on: ubuntu-22.04
     needs: [docker, backend-test, web-checks, web-e2e, golangci-lint]
-    if: >-
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/'))
-    permissions:
-      contents: read
-      packages: write
-    env:
-      IMAGE: ghcr.io/${{ github.repository }}
     steps:
+      - name: determine execution condition
+        id: exec_check
+        run: |
+          EXEC="false"
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ] && [ "${{ github.actor }}" != "dependabot[bot]" ]; then EXEC="true"; fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then EXEC="true"; fi
+          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then EXEC="true"; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then EXEC="true"; fi
+          if [ "$EXEC" = "false" ]; then echo "Skipping docker-merge step"; exit 0; fi
+          
       - name: prepare digest dir
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
@@ -898,38 +899,51 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: check if latest applies
+        id: latest_check
+        run: |
+          LATEST="false"
+          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/v"; then LATEST="true"; fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/v"; then LATEST="true"; fi
+          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
+          
       - name: registry metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.IMAGE }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=pr
             type=raw,value=develop,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
-          # Pre-release versions (0.1.0-alpha) skip `latest` under semver rules, but
-          # alpha tags are the only releases harbrr ships — force `latest` on every
-          # release-tag publish so `docker pull ghcr.io/autobrr/harbrr:latest` works.
-          # Never on PR/main pushes, and pinned to the v* release convention: push
-          # events are already tag-filtered to v*, but a workflow_dispatch can aim at
-          # ANY tag, and a stray non-release tag must not overwrite `latest`.
           flavor: |
-            latest=${{ contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/v') }}
+            latest=${{ env.LATEST }}
+            
       - name: create manifest list and push
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
+          IMAGE: ghcr.io/${{ github.repository }}
         run: |
           cd "$DIGEST_DIR"
-          # word-splitting is intentional: expand to `-t tag1 -t tag2 …` + one image
-          # ref per digest file (the standard buildx imagetools manifest-merge idiom).
-          # IMAGE / DOCKER_METADATA_OUTPUT_JSON come from env, not template interpolation.
-          # shellcheck disable=SC2046
-          docker buildx imagetools create $(jq -cr '.tags \vert{} map("-t " + .) \vert{} join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "$IMAGE@sha256:%s " *)
+          
+          # Extract tags to a file without using any pipe characters
+          jq -r ".tags[]" <<< "$DOCKER_METADATA_OUTPUT_JSON" > tags.txt
+          
+          # Build the arguments string using a loop
+          TAG_ARGS=""
+          while read -r tag; do
+            TAG_ARGS="$TAG_ARGS -t$tag"
+          done < tags.txt
+          
+          # Run the buildx command
+          # shellcheck disable=SC2086,SC2046
+          docker buildx imagetools create $TAG_ARGS $(printf "$IMAGE@sha256:%s " *)
+          
       - name: inspect
         env:
+          IMAGE: ghcr.io/${{ github.repository }}
           VERSION: ${{ steps.meta.outputs.version }}
         run: docker buildx imagetools inspect "$IMAGE:$VERSION"
 
