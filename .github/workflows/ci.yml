@@ -869,17 +869,16 @@ jobs:
     name: docker-merge
     runs-on: ubuntu-22.04
     needs: [docker, backend-test, web-checks, web-e2e, golangci-lint]
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (contains(fromJson('["push", "workflow_dispatch"]'), github.event_name) && startsWith(github.ref, 'refs/tags/'))
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
     steps:
-      - name: determine execution condition
-        id: exec_check
-        run: |
-          EXEC="false"
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ] && [ "${{ github.actor }}" != "dependabot[bot]" ]; then EXEC="true"; fi
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then EXEC="true"; fi
-          if [ "${{ github.event_name }}" = "push" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then EXEC="true"; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo "${{ github.ref }}" | grep -q "^refs/tags/"; then EXEC="true"; fi
-          if [ "$EXEC" = "false" ]; then echo "Skipping docker-merge step"; exit 0; fi
-          
       - name: prepare digest dir
         env:
           DIGEST_DIR: ${{ runner.temp }}/digests
@@ -926,17 +925,16 @@ jobs:
           DIGEST_DIR: ${{ runner.temp }}/digests
           IMAGE: ghcr.io/${{ github.repository }}
         run: |
-          cd "$DIGEST_DIR"
-          
-          # Extract tags to a file without using any pipe characters
-          jq -r ".tags[]" <<< "$DOCKER_METADATA_OUTPUT_JSON" > tags.txt
+          # Use /tmp to avoid polluting the DIGEST_DIR which is globbed by printf *
+          jq -r ".tags[]" <<< "$DOCKER_METADATA_OUTPUT_JSON" > /tmp/tags.txt
           
           # Build the arguments string using a loop
           TAG_ARGS=""
           while read -r tag; do
             TAG_ARGS="$TAG_ARGS -t$tag"
-          done < tags.txt
+          done < /tmp/tags.txt
           
+          cd "$DIGEST_DIR"
           # Run the buildx command
           # shellcheck disable=SC2086,SC2046
           docker buildx imagetools create $TAG_ARGS $(printf "$IMAGE@sha256:%s " *)
