@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**595 trackers** total: 552 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**606 trackers** total: 563 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,7 +74,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (404)
+### Private (415)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -95,6 +95,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Aidoru!Online | ✅ | ⬜ |
 | Aither (API) | ✅ | ✅ |
 | alingPT | ✅ | ⬜ |
+| alingPT (API) | ✅ | ⬜ |
 | Amigos Share Club | ✅ | ⬜ |
 | AnimeTorrents.ro | ✅ | ⬜ |
 | AnimeWorld (API) | ✅ | ⬜ |
@@ -106,6 +107,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | ArabTorrents | ✅ | ⬜ |
 | AsianCinema | ✅ | ⬜ |
 | AsianDVDClub | ✅ | ⬜ |
+| AstraTorrent | ✅ | ⬜ |
 | Audiences | ✅ | ⬜ |
 | AudioNews | ✅ | ⬜ |
 | Aussierul.es | ✅ | ⬜ |
@@ -167,6 +169,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Das Unerwartete (API) | ✅ | ⬜ |
 | DataScene (API) | ✅ | ⬜ |
 | DaXiangJiao (大香蕉) | ✅ | ⬜ |
+| DaXiangJiao (大香蕉) (API) | ✅ | ⬜ |
 | Depth Studio | ✅ | ⬜ |
 | DesiTorrents (API) | ✅ | ⬜ |
 | Diablo Torrent | ✅ | ⬜ |
@@ -259,6 +262,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Korsar | ✅ | ⬜ |
 | KrazyZone | ✅ | ⬜ |
 | Kufei (库非) | ✅ | ⬜ |
+| Kufei (库非) (API) | ✅ | ⬜ |
 | Kufirc | ✅ | ⬜ |
 | Kufirc2FA | ✅ | ⬜ |
 | lajidui | ✅ | ⬜ |
@@ -319,6 +323,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | OpenCD | ✅ | ⬜ |
 | Order66 | ✅ | ⬜ |
 | OshenPT | ✅ | ⬜ |
+| OshenPT (API) | ✅ | ⬜ |
 | OurBits | ✅ | ⬜ |
 | P2PBG | ✅ | ⬜ |
 | Panda | ✅ | ⬜ |
@@ -348,6 +353,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | PTLGS | ✅ | ⬜ |
 | PTSBAO (烧包) | ✅ | ⬜ |
 | PTSKIT | ✅ | ⬜ |
+| PTSKIT (API) | ✅ | ⬜ |
 | PTTey | ✅ | ⬜ |
 | PTTime | ✅ | ⬜ |
 | PTYING (樱花) | ✅ | ⬜ |
@@ -389,6 +395,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Slobit Games | ✅ | ⬜ |
 | SnowPT | ✅ | ⬜ |
 | SoulVoice (聆音Club) | ✅ | ⬜ |
+| SoulVoice (聆音Club) (API) | ✅ | ⬜ |
 | Speedmaster HD | ✅ | ⬜ |
 | Spirit of Revolution | ✅ | ⬜ |
 | SportsCora (API) | ✅ | ⬜ |
@@ -452,6 +459,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | UBits | ✅ | ⬜ |
 | Ultrabits (API) | ✅ | ⬜ |
 | UltraHD | ✅ | ⬜ |
+| UltraHD (API) | ✅ | ⬜ |
 | Unbreakable | ✅ | ⬜ |
 | Unlimitz | ✅ | ⬜ |
 | upload.cx (API) | ✅ | ✅ |
@@ -466,10 +474,12 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | World-In-HD | ✅ | ⬜ |
 | World-of-Tomorrow | ✅ | ⬜ |
 | XDY (修道院) | ✅ | ⬜ |
+| XDY (修道院) (API) | ✅ | ⬜ |
 | Xingtan (杏坛) | ✅ | ⬜ |
 | Xingwan (星湾) | ✅ | ⬜ |
 | Xingyung (星陨阁) | ✅ | ⬜ |
 | xloli | ✅ | ⬜ |
+| xloli (API) | ✅ | ⬜ |
 | xTorrenty | ✅ | ⬜ |
 | Xtreme Bytes | ✅ | ⬜ |
 | XWT-Classics | ✅ | ⬜ |
@@ -481,6 +491,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Zappateers | ✅ | ⬜ |
 | Zenith | ✅ | ⬜ |
 | ZmPT (织梦) | ✅ | ⬜ |
+| ZmPT (织梦) (API) | ✅ | ⬜ |
 | ZRPT (自然) | ✅ | ⬜ |
 
 ### Semi-private (61)
