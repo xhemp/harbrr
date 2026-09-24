@@ -21,6 +21,7 @@ caps:
     - {id: AAC, cat: Audio, desc: Music AAC}
     - {id: "Adult / Porn", cat: XXX, desc: "Adult / Porn"}
     - {id: Android, cat: PC/Mobile-Android, desc: Software Android}
+    - {id: Animation, cat: Movies, desc: Animation}
     - {id: Anime, cat: TV/Anime, desc: Anime}
     - {id: Audio books, cat: Audio/Audiobook, desc: Books Audiobook}
     - {id: Bollywood, cat: Movies, desc: Bollywood}
@@ -36,6 +37,7 @@ caps:
     - {id: Hentai, cat: XXX/Other, desc: Adult Hentai}
     - {id: Highres Movies, cat: Movies/HD, desc: Movies HD}
     - {id: Linux, cat: PC, desc: Software Linux}
+    - {id: "Live Action [English-translated]", cat: TV/Anime, desc: "Live Action [English-translated]"}
     - {id: "Live Action [Non-English]", cat: TV/Anime, desc: "Live Action [Non-English]"}
     - {id: Lossless, cat: Audio/Lossless, desc: Music Lossless}
     - {id: "Manga [English-translated]", cat: Books/Comics, desc: "Manga [English-translated]"}

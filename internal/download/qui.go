@@ -36,13 +36,7 @@ func newQui(c domain.DownloadClient, secret string, client *http.Client) (Driver
 		settings = *c.Settings.Qui
 	}
 	return &quiDriver{
-		jc: apphttp.NewJSONClient(apphttp.JSONClient{
-			Prefix: "download: qui",
-			Base:   c.Host,
-			Auth:   http.Header{"X-API-Key": {secret}},
-			Client: client,
-			Secret: secret,
-		}),
+		jc:         apphttp.NewAPIKeyClient("download: qui", c.Host, secret, client),
 		instanceID: settings.InstanceID,
 		category:   settings.Category,
 		tags:       settings.Tags,
@@ -74,19 +68,12 @@ func (d *quiDriver) Test(ctx context.Context) error {
 // to. Never emits ratioLimit/seedingTimeLimit: harbrr does not hit-and-run a
 // client-managed torrent (the qBittorrent driver's #246/no-hit-and-run
 // precedent).
-func (d *quiDriver) Add(ctx context.Context, p Payload, opts AddOptions) error {
+func (d *quiDriver) Add(ctx context.Context, p Payload) error {
 	if p.Protocol != ProtocolTorrent {
 		return fmt.Errorf("download: qui: %w: %s", ErrUnsupportedProtocol, p.Protocol)
 	}
 
-	category := d.category
-	if opts.Category != "" {
-		category = opts.Category
-	}
-	tags := mergeTags(d.tags, opts.Tags)
-	paused := d.paused || opts.Paused
-
-	body, contentType, err := quiAddBody(p, category, tags, paused)
+	body, contentType, err := quiAddBody(p, d.category, d.tags, d.paused)
 	if err != nil {
 		return fmt.Errorf("download: qui: build request body: %w", err)
 	}
