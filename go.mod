@@ -6,7 +6,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/alexedwards/scs/v2 v2.9.0
 	github.com/andybalholm/cascadia v1.3.5
-	github.com/autobrr/go-cache v1.0.0-rc1
 	github.com/autobrr/go-deluge v1.4.0
 	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/autobrr/go-rtorrent v1.12.0
@@ -26,7 +25,6 @@ require (
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
-	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
 	modernc.org/sqlite v1.59.0
