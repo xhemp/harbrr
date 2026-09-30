@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**606 trackers** total: 563 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**617 trackers** total: 574 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,14 +74,16 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (415)
+### Private (426)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
 | 0day.kiev | ✅ | ⬜ |
 | 0DayFiles (API) | ✅ | ⬜ |
 | 13City | ✅ | ⬜ |
+| 13City (API) | ✅ | ⬜ |
 | 1ptbar | ✅ | ⬜ |
+| 1ptbar (API) | ✅ | ⬜ |
 | 3D Torrents | ✅ | ⬜ |
 | 3D Vault (API) | ✅ | ⬜ |
 | 4thD | ✅ | ⬜ |
@@ -196,6 +198,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | FinElite | ✅ | ⬜ |
 | Flood | ✅ | ⬜ |
 | Free Farm (自由农场) | ✅ | ⬜ |
+| Free Farm (自由农场) (API) | ✅ | ⬜ |
 | FunFile | ✅ | ⬜ |
 | funZone (API) | ✅ | ⬜ |
 | FutureTorrent | ✅ | ⬜ |
@@ -266,18 +269,21 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Kufirc | ✅ | ⬜ |
 | Kufirc2FA | ✅ | ⬜ |
 | lajidui | ✅ | ⬜ |
+| lajidui (API) | ✅ | ⬜ |
 | Last Digital Underground | ✅ | ✅ |
 | LastFiles | ✅ | ⬜ |
 | Lat-Team (API) | ✅ | ⬜ |
 | LearnFlakes | ✅ | ⬜ |
 | leech24 | ✅ | ⬜ |
 | LemonHD.net | ✅ | ⬜ |
+| LemonHD.net (API) | ✅ | ⬜ |
 | LeSaloon | ✅ | ⬜ |
 | LetSeed | ✅ | ⬜ |
 | LibraNet | ✅ | ⬜ |
 | LinkoManija | ✅ | ⬜ |
 | Locadora (API) | ✅ | ⬜ |
 | LongPT | ✅ | ⬜ |
+| LongPT (API) | ✅ | ⬜ |
 | LosslessClub | ✅ | ⬜ |
 | LP-Bits 2.0 | ✅ | ⬜ |
 | LST | ✅ | ✅ |
@@ -309,6 +315,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | nCore | ✅ | ⬜ |
 | New Heaven | ✅ | ⬜ |
 | NicePT | ✅ | ⬜ |
+| NicePT (API) | ✅ | ⬜ |
 | Nirvana (API) | ✅ | ⬜ |
 | njtupt (浦园) | ✅ | ⬜ |
 | NOBS | ✅ | ⬜ |
@@ -343,7 +350,9 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Portugas (API) | ✅ | ⬜ |
 | ProAudioTorrents | ✅ | ⬜ |
 | PT GTK | ✅ | ⬜ |
+| PT GTK (API) | ✅ | ⬜ |
 | PTCafe (咖啡) | ✅ | ⬜ |
+| PTCafe (咖啡) (API) | ✅ | ⬜ |
 | PTCC (我的PT) | ✅ | ⬜ |
 | PTerClub (PT之友俱乐部) | ✅ | ⬜ |
 | PTFans | ✅ | ⬜ |
@@ -358,6 +367,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | PTTime | ✅ | ⬜ |
 | PTYING (樱花) | ✅ | ⬜ |
 | PTzone | ✅ | ⬜ |
+| PTzone (API) | ✅ | ⬜ |
 | PT分享站 (itzmx) | ✅ | ⬜ |
 | Punk's Horror Tracker | ✅ | ⬜ |
 | PuntoTorrent | ✅ | ⬜ |
@@ -424,6 +434,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | The Place | ✅ | ⬜ |
 | The Show | ✅ | ⬜ |
 | The Vault | ✅ | ⬜ |
+| The Word Music | ✅ | ⬜ |
 | The-New-Fun | ✅ | ⬜ |
 | TheLeachZone (API) | ✅ | ⬜ |
 | Thor HUB (API) | ✅ | ⬜ |
