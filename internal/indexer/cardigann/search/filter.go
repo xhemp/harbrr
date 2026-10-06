@@ -140,7 +140,6 @@ func firstArg(args []string) string {
 	return args[0]
 }
 
-
 // filterBase64Decode decodes a standard base64 string.
 func filterBase64Decode(value string, _ []string) (string, error) {
 	decoded, err := base64.StdEncoding.DecodeString(value)
