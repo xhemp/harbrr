@@ -1,17 +1,11 @@
 package search
 
 import (
+	"encoding/base64"
 	"fmt"
-  "encoding/base64"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
-case "base64decode":
-    decoded, err := base64.StdEncoding.DecodeString(s) // Use the variable name your function uses (e.g., 's', 'input', 'val')
-    if err != nil {
-        return "", err
-    }
-    return string(decoded), nil
 // filterFunc transforms a field value given its (already []string-normalized)
 // filter arguments. It is the per-op unit dispatched by apply.
 type filterFunc func(value string, args []string) (string, error)
@@ -78,6 +72,7 @@ func (r *FilterRegistry) buildOps() map[string]filterFunc {
 		"hexdump":       filterPassthrough,
 		"strdump":       filterPassthrough,
 		"validate":      filterValidate,
+		"base64decode":  filterBase64Decode, // <--- Add this line here
 	}
 
 	ops["dateparse"] = r.dateOp
@@ -143,4 +138,14 @@ func firstArg(args []string) string {
 		return ""
 	}
 	return args[0]
+}
+
+
+// filterBase64Decode decodes a standard base64 string.
+func filterBase64Decode(value string, _ []string) (string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", fmt.Errorf("base64decode: %w", err)
+	}
+	return string(decoded), nil
 }
