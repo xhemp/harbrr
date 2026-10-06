@@ -3,6 +3,7 @@ package search
 import (
 	"encoding/base64"
 	"fmt"
+
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
