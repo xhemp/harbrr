@@ -2,10 +2,16 @@ package search
 
 import (
 	"fmt"
-
+  "encoding/base64"
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
 )
 
+case "base64decode":
+    decoded, err := base64.StdEncoding.DecodeString(s) // Use the variable name your function uses (e.g., 's', 'input', 'val')
+    if err != nil {
+        return "", err
+    }
+    return string(decoded), nil
 // filterFunc transforms a field value given its (already []string-normalized)
 // filter arguments. It is the per-op unit dispatched by apply.
 type filterFunc func(value string, args []string) (string, error)
