@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**627 trackers** total: 584 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**628 trackers** total: 585 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,7 +74,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (438)
+### Private (439)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -87,6 +87,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | 3D Torrents | ✅ | ⬜ |
 | 3D Vault (API) | ✅ | ⬜ |
 | 4thD | ✅ | ⬜ |
+| 52movie | ✅ | ⬜ |
 | 52PT | ✅ | ⬜ |
 | 720pier | ✅ | ⬜ |
 | Abnormal (API) | ✅ | ⬜ |
@@ -229,6 +230,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | HD-UNiT3D (API) | ✅ | ⬜ |
 | HDArea | ✅ | ⬜ |
 | HDBao | ✅ | ⬜ |
+| HDBao (API) | ✅ | ⬜ |
 | HDCiTY | ✅ | ⬜ |
 | HDClone | ✅ | ⬜ |
 | HDFans | ✅ | ⬜ |
@@ -388,6 +390,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Qingwa (青蛙) | ✅ | ⬜ |
 | R3V WTF! | ✅ | ⬜ |
 | Racing4Everyone (API) | ✅ | ✅ |
+| Racing4us | ✅ | ⬜ |
 | RacingForMe | ✅ | ✅ |
 | RailgunPT | ✅ | ⬜ |
 | Rastastugan (API) | ✅ | ✅ |
@@ -413,7 +416,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | SiamBIT | ✅ | ⬜ |
 | Siqi | ✅ | ⬜ |
 | SkipTheCommercials (API) | ✅ | ⬜ |
-| Slobit Games | ✅ | ⬜ |
 | SnowPT | ✅ | ⬜ |
 | SoulVoice (聆音Club) | ✅ | ⬜ |
 | SoulVoice (聆音Club) (API) | ✅ | ⬜ |
@@ -421,7 +423,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Spirit of Revolution | ✅ | ⬜ |
 | SportsCora (API) | ✅ | ⬜ |
 | SportsCult | ✅ | ⬜ |
-| Sportz247 | ✅ | ⬜ |
 | SpringSunday | ✅ | ⬜ |
 | Stellarwinds | ✅ | ⬜ |
 | Superbits | ✅ | ⬜ |
