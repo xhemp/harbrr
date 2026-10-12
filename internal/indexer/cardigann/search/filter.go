@@ -1,6 +1,7 @@
 package search
 
 import (
+	"encoding/base64"
 	"fmt"
 
 	"github.com/autobrr/harbrr/internal/indexer/cardigann/loader"
@@ -72,6 +73,7 @@ func (r *FilterRegistry) buildOps() map[string]filterFunc {
 		"hexdump":       filterPassthrough,
 		"strdump":       filterPassthrough,
 		"validate":      filterValidate,
+		"base64decode":  filterBase64Decode, // <--- Add this line here
 	}
 
 	ops["dateparse"] = r.dateOp
@@ -137,4 +139,13 @@ func firstArg(args []string) string {
 		return ""
 	}
 	return args[0]
+}
+
+// filterBase64Decode decodes a standard base64 string.
+func filterBase64Decode(value string, _ []string) (string, error) {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", fmt.Errorf("base64decode: %w", err)
+	}
+	return string(decoded), nil
 }

@@ -58,7 +58,11 @@ search:
     Authorization: ["Bearer {{ .Config.apikey }}"]
 
   inputs:
+<<<<<<< HEAD
     t: "{{ if .Query.TMDBID }}movie{{ else }}{{ end }}{{ if or .Query.Season .Query.Ep .Query.IMDBID .Query.TVDBID }}tvsearch{{ else }}{{ end }}{{ if or .Query.TVDBID .Query.IMDBID .Query.TMDBID .Query.Season .Query.Ep }}{{ else }}search{{ end }}"
+=======
+    t: "{{ if .Query.TMDBID }}movie{{ else }}{{ end }}{{ if or .Query.Season .Query.Ep .Query.IMDBID }}tvsearch{{ else }}{{ end }}{{ if or .Query.IMDBID .Query.TMDBID .Query.Season .Query.Ep }}{{ else }}search{{ end }}"
+>>>>>>> main
     q: "{{ .Keywords }}"
     season: "{{ .Query.Season }}"
     ep: "{{ .Query.Ep }}"

@@ -11,6 +11,7 @@ Cardigann can't express — and how far each is validated.
   column and the auth/fetch patterns proven live.
 
 **628 trackers** total: 585 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**627 trackers** total: 584 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,7 +75,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (439)
+### Private (438)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
