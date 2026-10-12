@@ -171,40 +171,23 @@ search:
       selector: "p:contains(\"Size:\")"
       filters:
         - name: regexp
-<<<<<<< HEAD:internal/indexer/definitions/vendor/racing4us.yml
           args: src=([^\s]+)
     size:
       text: 2GB
     date:
       # auto adjusted by site account profile
       selector: td:nth-child(4)
-=======
-          args: "Size:\\s+(.+)"
-    date:
-      # auto adjusted by site account profile
-      selector: "p:contains(\"AddDate:\")"
->>>>>>> main:internal/indexer/definitions/vendor/sportz247.yml
       filters:
         - name: regexp
           args: "AddDate:\\s+(.+)"
         - name: dateparse
           args: "HH:mm:ss dd/MM/yyyy"
     seeders:
-<<<<<<< HEAD:internal/indexer/definitions/vendor/racing4us.yml
       selector: td:nth-child(5)
     leechers:
       selector: td:nth-child(6)
     grabs:
       selector: td:nth-child(7)
-=======
-      selector: a[href^="index.php?page=peers&id="]:nth-child(1)
-    leechers:
-      selector: a[href^="index.php?page=peers&id="]:nth-child(2)
-    grabs:
-      selector: a[href^="index.php?page=torrent_history&id="]
-      optional: true
-      default: 0
->>>>>>> main:internal/indexer/definitions/vendor/sportz247.yml
     downloadvolumefactor:
       text: 1
     uploadvolumefactor:
