@@ -74,7 +74,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (439)
+### Private (441)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -97,7 +97,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | AGSVPT | ✅ | ⬜ |
 | Aidoru!Online | ✅ | ⬜ |
 | Aither (API) | ✅ | ✅ |
-| AlaBala | ✅ | ⬜ |
+| AlaBala (API) | ✅ | ⬜ |
 | alingPT | ✅ | ⬜ |
 | alingPT (API) | ✅ | ⬜ |
 | Amigos Share Club | ✅ | ⬜ |
@@ -183,6 +183,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | DimeADozen | ✅ | ⬜ |
 | DirtyBytes (API) | ✅ | ⬜ |
 | DiscFan | ✅ | ⬜ |
+| DiscFan (API) | ✅ | ⬜ |
 | DocsPedia | ✅ | ⬜ |
 | DreadVault (API) | ✅ | ⬜ |
 | Drugari | ✅ | ⬜ |
@@ -492,6 +493,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | V3X | ✅ | ⬜ |
 | Vault network | ✅ | ⬜ |
 | VC-Lib | ✅ | ⬜ |
+| VC-Lib (API) | ✅ | ⬜ |
 | VietMediaF | ✅ | ⬜ |
 | White Angel | ✅ | ⬜ |
 | WinterSakura | ✅ | ⬜ |
@@ -518,7 +520,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | ZmPT (织梦) (API) | ✅ | ⬜ |
 | ZRPT (自然) | ✅ | ⬜ |
 
-### Semi-private (60)
+### Semi-private (59)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -560,7 +562,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | New-Team | ✅ | ⬜ |
 | NewStudioL | ✅ | ⬜ |
 | NoNaMe ClubL | ✅ | ⬜ |
-| Polskie-Torrenty | ✅ | ⬜ |
 | PornoLab | ✅ | ⬜ |
 | Postman (API) | ✅ | ⬜ |
 | ProPorno | ✅ | ⬜ |
@@ -583,7 +584,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | UzTracker | ✅ | ⬜ |
 | Ztracker | ✅ | ⬜ |
 
-### Public (86)
+### Public (85)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -611,7 +612,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | EZTV | ✅ | ⬜ |
 | FileMood | ✅ | ⬜ |
 | Free JAV Torrent | ✅ | ⬜ |
-| GamesTorrents | ✅ | ⬜ |
 | Internet Archive | ✅ | ⬜ |
 | kickasstorrents.to | ✅ | ⬜ |
 | kickasstorrents.ws | ✅ | ⬜ |
