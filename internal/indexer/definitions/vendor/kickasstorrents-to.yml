@@ -62,6 +62,7 @@ caps:
     - {id: "BooksManga[English-translated]", cat: Books/Comics, desc: "Books Manga English-translated"}
     - {id: "BooksManga[Raw]", cat: Books/Comics, desc: "Books Manga Raw"}
     - {id: BooksNon-Fiction, cat: Books/EBook, desc: "Books Non-Fiction"}
+    - {id: BooksNon-FictionAudiobooks, cat: Books/EBook, desc: "Books Non-Fiction Audiobooks"}
     - {id: Comics, cat: Books/Comics, desc: Comics}
     - {id: DVD, cat: Movies/DVD, desc: "Movies DVD"}
     - {id: Documentary, cat: Movies/Other, desc: "Movies Documentary"}
@@ -76,6 +77,7 @@ caps:
     - {id: GamesPS3, cat: Console/PS3, desc: PS3}
     - {id: GamesPS4, cat: Console/PS4, desc: PS4}
     - {id: GamesPSP, cat: Console/PSP, desc: PSP}
+    - {id: GamesSwitch, cat: Console/Other, desc: Switch}
     - {id: GamesWii, cat: Console/Wii, desc: Wii}
     - {id: GamesXbox360, cat: Console/XBox 360, desc: Xbox360}
     - {id: HighresMovies, cat: Movies/HD, desc: "Movies Highres"}

@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**628 trackers** total: 585 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**633 trackers** total: 590 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,7 +74,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (440)
+### Private (445)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -142,6 +142,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | BTSCHOOL | ✅ | ⬜ |
 | BwTorrents | ✅ | ⬜ |
 | BYRBT | ✅ | ⬜ |
+| BytePeer | ✅ | ⬜ |
 | C411 | ✅ | ⬜ |
 | Caishen (财神) | ✅ | ⬜ |
 | cangbaoge (CBG) | ✅ | ⬜ |
@@ -165,6 +166,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | CrnaBerza2FA | ✅ | ⬜ |
 | CRT2FA | ✅ | ⬜ |
 | cyanbug (大青虫) | ✅ | ⬜ |
+| cyanbug (大青虫) (API) | ✅ | ⬜ |
 | CyclingArchiveClub | ✅ | ⬜ |
 | CZTeam (API) | ✅ | ✅ |
 | DanishBits (API) | ✅ | ⬜ |
@@ -233,6 +235,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | HDArea | ✅ | ⬜ |
 | HDBao | ✅ | ⬜ |
 | HDBao (API) | ✅ | ⬜ |
+| HDChina | ✅ | ⬜ |
 | HDCiTY | ✅ | ⬜ |
 | HDClone | ✅ | ⬜ |
 | HDFans | ✅ | ⬜ |
@@ -257,7 +260,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | House of Devil | ✅ | ⬜ |
 | HQMusic | ✅ | ⬜ |
 | HUDBT (蝴蝶) | ✅ | ⬜ |
-| HxPT (好学) | ✅ | ⬜ |
 | Hǎitáng (海棠PT) | ✅ | ⬜ |
 | Immortuos | ✅ | ⬜ |
 | Indietorrents | ✅ | ⬜ |
@@ -327,6 +329,7 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | New Heaven | ✅ | ⬜ |
 | NicePT | ✅ | ⬜ |
 | NicePT (API) | ✅ | ⬜ |
+| NightBloom (API) | ✅ | ⬜ |
 | Nirvana (API) | ✅ | ⬜ |
 | njtupt (浦园) | ✅ | ⬜ |
 | NOBS | ✅ | ⬜ |
@@ -392,7 +395,9 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Racing4us | ✅ | ⬜ |
 | RacingForMe | ✅ | ✅ |
 | RailgunPT | ✅ | ⬜ |
+| RailgunPT (API) | ✅ | ⬜ |
 | Rastastugan (API) | ✅ | ✅ |
+| Red Angel | ✅ | ⬜ |
 | Red Star Torrent | ✅ | ⬜ |
 | ReelFLiX (API) | ✅ | ✅ |
 | RetroMoviesClub (API) | ✅ | ✅ |
