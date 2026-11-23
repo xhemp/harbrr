@@ -10,7 +10,7 @@ Cardigann can't express — and how far each is validated.
   account on that tracker). See **[Test status](test-status.md)** for the evidence behind this
   column and the auth/fetch patterns proven live.
 
-**633 trackers** total: 590 Cardigann corpus (all built) · 26 native drivers built · 17 native
+**631 trackers** total: 588 Cardigann corpus (all built) · 26 native drivers built · 17 native
 drivers planned. To configure one, see **[Adding an indexer](guides/add-indexer.md)**.
 
 ## Native drivers
@@ -74,7 +74,7 @@ Native drivers we have issues for but haven't built. 👍 or comment on the issu
 
 Served through the shared engine from the vendored Jackett snapshot — all built. Live-tested where an operator instance covers them.
 
-### Private (445)
+### Private (444)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -142,7 +142,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | BTSCHOOL | ✅ | ⬜ |
 | BwTorrents | ✅ | ⬜ |
 | BYRBT | ✅ | ⬜ |
-| BytePeer | ✅ | ⬜ |
 | C411 | ✅ | ⬜ |
 | Caishen (财神) | ✅ | ⬜ |
 | cangbaoge (CBG) | ✅ | ⬜ |
@@ -317,7 +316,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | MMA-torrents | ✅ | ⬜ |
 | MNV | ✅ | ⬜ |
 | MOJBLiNK | ✅ | ⬜ |
-| MomentPT | ✅ | ⬜ |
 | MonikaDesign (API) | ✅ | ⬜ |
 | MouseBits | ✅ | ⬜ |
 | Musopia (音乐乌托邦) | ✅ | ⬜ |
@@ -471,12 +469,12 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | TorrentClaw | ✅ | ⬜ |
 | TorrentDD | ✅ | ⬜ |
 | Torrenteros (API) | ✅ | ⬜ |
-| TorrentHaven (API) | ✅ | ⬜ |
 | TorrentHR (API) | ✅ | ⬜ |
 | Torrenting | ✅ | ⬜ |
 | TorrentLeech | ✅ | ✅ |
 | ToTheGlory | ✅ | ⬜ |
 | ToTheGlory2FA | ✅ | ⬜ |
+| Trackerformers | ✅ | ⬜ |
 | TrackerMK | ✅ | ⬜ |
 | TrackerZero | ✅ | ⬜ |
 | TranceTraffic | ✅ | ⬜ |
@@ -523,8 +521,9 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | ZmPT (织梦) (API) | ✅ | ⬜ |
 | ZooToons | ✅ | ⬜ |
 | ZRPT (自然) | ✅ | ⬜ |
+| ZXX CLUB | ✅ | ⬜ |
 
-### Semi-private (61)
+### Semi-private (60)
 
 | Tracker | Built | Live-tested |
 |---|:--:|:--:|
@@ -549,7 +548,6 @@ Served through the shared engine from the vendored Jackett snapshot — all buil
 | Gay-Torrents.net | ✅ | ⬜ |
 | HDGalaKtik | ✅ | ⬜ |
 | HellTorrents | ✅ | ⬜ |
-| HunTorrent | ✅ | ⬜ |
 | Il Corsaro Blu | ✅ | ⬜ |
 | ilDraGoNeRo | ✅ | ⬜ |
 | Kinorun | ✅ | ⬜ |
